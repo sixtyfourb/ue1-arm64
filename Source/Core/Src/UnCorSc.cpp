@@ -2222,7 +2222,7 @@ IMPLEMENT_FUNCTION( UObject, EX_RotationConst, execRotationConst );
 void UObject::execVectorConst( FFrame& Stack, RESULT_DECL )
 {
 	guardSlow(UObject::execVectorConst);
-#ifdef PLATFORM_DREAMCAST
+#if defined(PLATFORM_DREAMCAST) || defined(__ANDROID__)
 	FVector Temp;
 	__builtin_memcpy(&Temp, Stack.Code, sizeof(FVector));
 	*(FVector*)Result = Temp;

@@ -44,6 +44,7 @@ ENGINE_API extern class FMemCache	GCache;
 #include "UnModel.h"			// Model class.
 #include "UnTex.h"				// Texture and palette.
 #include "EngineClasses.h"		// All actor classes.
+#include "UnV69Classes.h"		// Classes 469 made native.
 #include "UnReach.h"			// Reach specs.
 #include "UnURL.h"				// Uniform resource locators.
 #include "UnLevel.h"			// Level object.

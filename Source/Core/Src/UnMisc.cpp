@@ -1558,10 +1558,20 @@ UBOOL appFindPackageFile( const TCHAR* In, const FGuid* Guid, TCHAR* Out )
 			TCHAR Spec[256];
 			*Spec = 0;
 			TArray<FString> Files;
+			// List the whole directory, not "*<Ext>". This is the
+			// case-insensitive fallback, but the glob it used was still case
+			// sensitive, so a retail file named CREDITS.UTX never matched
+			// "../Textures/*.utx" and the Textures directory was invisible
+			// here. The search then ran on to ../Music and matched
+			// Credits.umx, which is a different package, and Entry.unr failed
+			// to find the group credits.Base that lives in the texture one.
+			//
+			// Nothing is loosened by dropping the extension from the glob:
+			// the comparisons below still test against In and In+Ext, so the
+			// extension is enforced there - just case insensitively, like the
+			// name it sits on.
 			appStrcpy( Spec, Temp );
 			appStrcat( Spec, TEXT("*") );
-			if( Ext )
-				appStrcat( Spec, Ext );
 			Files = GFileManager->FindFiles( Spec, 1, 0 );
 
 			// Check for match.

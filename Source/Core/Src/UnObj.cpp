@@ -317,6 +317,15 @@ UBOOL UObject::ConditionalDestroy()
 	{
 		SetFlags( RF_Destroyed );
 		ClearFlags( RF_DebugDestroy );
+
+		// Leave the object hash here rather than in the destructor. Purging
+		// runs destroys for every unreachable object before deleting any of
+		// them, so this is the last point at which Outer is guaranteed alive -
+		// and Outer's index is the bucket HashObject() chose. Unhashing later
+		// can read a freed Outer, pick the wrong bucket, remove nothing, and
+		// leave this object in its real chain after the memory is gone.
+		UnhashObject( Outer ? Outer->GetIndex() : 0 );
+
 		Destroy();
 		if( !(GetFlags()&RF_DebugDestroy) )
 			appErrorf( TEXT("%s failed to route Destroy"), GetFullName() );
@@ -380,8 +389,17 @@ UObject::~UObject()
 		// Destroy the object if necessary.
 		ConditionalDestroy();
 
-		// Remove object from table.
-		UnhashObject( _LinkerIndex );
+		// Normally already unhashed by ConditionalDestroy above, where Outer
+		// was still alive; this catches anything deleted without one. The
+		// index has to be the one HashObject() used - its Outer's - and not
+		// _LinkerIndex, which is this object's slot in its linker's export
+		// table and has nothing to do with the bucket. Unhashing the wrong
+		// bucket removes nothing and leaves a freed object in the real chain,
+		// so the next lookup that walks it reads dangling memory and the
+		// entries behind it simply vanish - Engine.Font going missing after a
+		// map change, and "Can't find Class in file 'Class Engine.Font'", was
+		// exactly that.
+		UnhashObject( Outer ? Outer->GetIndex() : 0 );
 		GObjObjects(Index) = NULL;
 		GObjAvailable.AddItem( Index );
 	}
@@ -2994,23 +3012,56 @@ void UObject::HashObject()
 void UObject::UnhashObject( INT OuterIndex )
 {
 	guard(UObject::UnhashObject);
-	INT       iHash   = GetObjectHash( Name, OuterIndex );
+
+	// Take this object out of the object hash, wherever it actually sits.
+	//
+	// HashObject() picks the bucket from the Outer's index, so the caller has
+	// to hand back that same index - and it cannot always: by the time an
+	// object is destroyed its Outer may have been recycled into a different
+	// object with a different index. Leaving the entry behind is not a benign
+	// leak. Once this memory is freed and handed to a new object, hashing that
+	// object overwrites HashNext, and every entry behind the stale one in the
+	// old chain is orphaned - reachable objects that simply stop being found.
+	// That is how Engine.Font, a native class nothing ever destroys, went
+	// missing from its bucket after a map change and took UPakFonts, UPak and
+	// the campaign's player class down with it.
+	//
+	// So: try the bucket we were told, and if the object is not there, find
+	// the one it is in. The scan only runs when the index was stale.
+	INT Removed = RemoveFromHashBucket( GetObjectHash( Name, OuterIndex ) );
+	if( !Removed )
+		for( INT i=0; i<ARRAY_COUNT(GObjHash); i++ )
+			if( (Removed = RemoveFromHashBucket( i ))!=0 )
+				break;
+
+	// Reported by index, not by name: this runs mid-destruction and the name
+	// table entry is not safe to dereference here.
+	if( Removed>1 )
+		debugf( NAME_Warning, TEXT("UnhashObject removed %i entries for object %i (name %i)"),
+			Removed, Index, Name.GetIndex() );
+
+	unguard;
+}
+
+//
+// Unlink this object from one hash chain; returns how many entries went.
+//
+INT UObject::RemoveFromHashBucket( INT iHash )
+{
+	guard(UObject::RemoveFromHashBucket);
 	UObject** Hash    = &GObjHash[iHash];
 	INT       Removed = 0;
 	while( *Hash != NULL )
 	{
 		if( *Hash != this )
-		{
 			Hash = &(*Hash)->HashNext;
- 		}
 		else
 		{
 			*Hash = (*Hash)->HashNext;
 			Removed++;
 		}
 	}
-	//check(Removed!=0);
-	//check(Removed==1);
+	return Removed;
 	unguard;
 }
 
@@ -3205,65 +3256,52 @@ UObject* UObject::StaticConstructObject
 	guard(UObject::StaticConstructObject);
 	check(Error);
 
-	// maximqad: figure out how to fix zeroing on player actor 
-#if 1
 	// Allocate the object.
 	UObject* Result = StaticAllocateObject( InClass, InOuter, InName, InFlags, InTemplate, Error );
 	if( Result )
 	{
-		// STUPID HACK: 
-		// For Actor classes (detected by Role property), save and restore initialized data around constructor.
-		UProperty* RoleProp = FindRoleProperty( InClass );
-		if( RoleProp )
+		// `new(Object) TClass()` value-initializes, and for a class with no
+		// user-declared constructor that means the whole object is zero-filled
+		// - including the UObject header StaticAllocateObject has just written.
+		// The object then has no Class, so the first GetClass() on it reads
+		// garbage. It bites any native class that declares no constructor of
+		// its own: the script-derived ones all use NO_DEFAULT_CONSTRUCTOR and
+		// never run one, which is why it only shows up on the likes of
+		// UVectors and UBspSurfs - the containers a pre-62 map is made of.
+		INT      SavedIndex = Result->Index;
+		UClass*  SavedClass = Result->Class;
+		UObject* SavedOuter = Result->Outer;
+		FName    SavedName  = Result->Name;
+		DWORD    SavedFlags = Result->ObjectFlags;
+
+		// Actors additionally keep the properties StaticAllocateObject seeded
+		// from the class defaults: their constructors are generated and would
+		// otherwise undo that.
+		UProperty* RoleProp       = FindRoleProperty( InClass );
+		INT        StartOffset    = sizeof(UObject);
+		INT        ActorDataSize  = RoleProp ? InClass->GetPropertiesSize() - StartOffset : 0;
+		BYTE*      SavedActorData = NULL;
+		if( ActorDataSize > 0 )
 		{
-			// Save UObject header fields
-			INT SavedIndex = Result->Index;
-			UClass* SavedClass = Result->Class;
-			UObject* SavedOuter = Result->Outer;
-			FName SavedName = Result->Name;
-			DWORD SavedFlags = Result->ObjectFlags;
-
-			// Save ALL actor data (everything after UObject header)
-			INT StartOffset = sizeof(UObject);
-			INT ActorDataSize = InClass->GetPropertiesSize() - StartOffset;
-			BYTE* SavedActorData = NULL;
-
-			if( ActorDataSize > 0 )
-			{
-				SavedActorData = (BYTE*)appMalloc(ActorDataSize, TEXT("SavedActorData"));
-				appMemcpy(SavedActorData, (BYTE*)Result + StartOffset, ActorDataSize);
-			}
-
-			(*InClass->ClassConstructor)( Result );
-
-			// Restore UObject header fields
-			Result->Index = SavedIndex;
-			Result->Class = SavedClass;
-			Result->Outer = SavedOuter;
-			Result->Name = SavedName;
-			Result->ObjectFlags = SavedFlags;
-
-			// Restore ALL actor data
-			if( ActorDataSize > 0 && SavedActorData )
-			{
-				appMemcpy((BYTE*)Result + StartOffset, SavedActorData, ActorDataSize);
-				appFree(SavedActorData);
-			}
+			SavedActorData = (BYTE*)appMalloc( ActorDataSize, TEXT("SavedActorData") );
+			appMemcpy( SavedActorData, (BYTE*)Result + StartOffset, ActorDataSize );
 		}
-		else
+
+		(*InClass->ClassConstructor)( Result );
+
+		Result->Index       = SavedIndex;
+		Result->Class       = SavedClass;
+		Result->Outer       = SavedOuter;
+		Result->Name        = SavedName;
+		Result->ObjectFlags = SavedFlags;
+
+		if( SavedActorData )
 		{
-			// Not an Actor - just call the constructor normally
-			(*InClass->ClassConstructor)( Result );
+			appMemcpy( (BYTE*)Result + StartOffset, SavedActorData, ActorDataSize );
+			appFree( SavedActorData );
 		}
 	}
 	return Result;
-#else
-		// Allocate the object.
-		UObject* Result = StaticAllocateObject( InClass, InOuter, InName, InFlags, InTemplate, Error );
-		if( Result )
-			(*InClass->ClassConstructor)( Result );
-		return Result;
-#endif
 	unguard;
 }
 /*-----------------------------------------------------------------------------
@@ -3444,6 +3482,49 @@ void UObject::PurgeGarbage()
 //
 // Delete all unreferenced objects.
 //
+//
+// Put the object hash back in step with the object table.
+//
+// A bucket is chosen from the Outer's index and the name's index, and both can
+// move under an object between the point it was hashed and the point it is
+// taken out again. A stale entry is not a benign leak: once that memory is
+// handed to a new object, hashing the new object overwrites HashNext and
+// orphans everything behind the stale entry in the chain. Those objects are
+// still in the table and still reachable - they just stop being found. That is
+// how Engine.Font, and later Engine.Actor, went missing across a map change.
+//
+// Rather than chase every way the two can drift apart, check them against each
+// other and relink whatever has come adrift.
+//
+void UObject::RelinkObjectHash( const TCHAR* Context )
+{
+	guard(UObject::RelinkObjectHash);
+	INT Relinked = 0;
+	for( INT i=0; i<GObjObjects.Num(); i++ )
+	{
+		UObject* Obj = GObjObjects(i);
+		if( !Obj )
+			continue;
+		INT iHash = GetObjectHash( Obj->GetFName(), Obj->GetOuter() ? Obj->GetOuter()->GetIndex() : 0 );
+		UBOOL Found = 0;
+		for( UObject* Hash=GObjHash[iHash]; Hash; Hash=Hash->HashNext )
+			if( Hash==Obj )
+				{ Found = 1; break; }
+		if( !Found )
+		{
+			// Take it out of whatever chain it is really in first, so this
+			// cannot leave a second copy behind.
+			Obj->UnhashObject( iHash );
+			Obj->HashObject();
+			Relinked++;
+		}
+	}
+	if( Relinked )
+		debugf( NAME_Log, TEXT("Object hash: relinked %i of %i objects (%s)"),
+			Relinked, GObjObjects.Num(), Context );
+	unguard;
+}
+
 void UObject::CollectGarbage( DWORD KeepFlags )
 {
 	guard(UObject::CollectGarbage);
@@ -3455,6 +3536,8 @@ void UObject::CollectGarbage( DWORD KeepFlags )
 
 	// Purge it.
 	PurgeGarbage();
+
+	RelinkObjectHash( TEXT("collection") );
 
 	unguard;
 }
@@ -3547,7 +3630,18 @@ void UObject::CacheDrivers( UBOOL ForceRefresh )
 		{for( INT i=0; i<GSys->Paths.Num(); i++ )
 		{
 			TCHAR Filename[256];
-			appSprintf( Filename, TEXT("%s%s"), appBaseDir(), *GSys->Paths(i) );
+			// An absolute path is already complete - prefixing the base
+			// directory onto it yields nonsense like
+			// /tmp/.mount_XXX/usr/bin//home/me/.local/share/ut99/System/*.int,
+			// which matches nothing. Nothing reports an error: the class
+			// registry simply comes up empty, and every menu built from .int
+			// metadata - game types, mutators, player characters - is blank.
+			// Paths are absolute whenever the engine and the game data live
+			// apart, as they do when the engine ships as an AppImage.
+			if( (*GSys->Paths(i))[0] == PATH_SEPARATOR[0] )
+				appStrncpy( Filename, *GSys->Paths(i), ARRAY_COUNT(Filename) );
+			else
+				appSprintf( Filename, TEXT("%s%s"), appBaseDir(), *GSys->Paths(i) );
 			TCHAR* Tmp = appStrstr( Filename, TEXT("*.") );
 			if( Tmp )
 			{
@@ -3555,7 +3649,10 @@ void UObject::CacheDrivers( UBOOL ForceRefresh )
 				TArray<FString> Files = GFileManager->FindFiles( Filename, 1, 0 );
 				for( INT j=0; j<Files.Num(); j++ )
 				{
-					appSprintf( Tmp, TEXT("%s%s"), appBaseDir(), *Files(j) );
+					// Tmp still points just past the directory, and FindFiles
+					// returns bare names, so writing the name here rebuilds
+					// the full path for whichever form Filename took.
+					appSprintf( Tmp, TEXT("%s"), *Files(j) );
 					TCHAR* End = Tmp + appStrlen( Tmp ) - 4;
 					appSprintf( End, TEXT(".%s"), UObject::GetLanguage() );
 					UBOOL Success = GConfig->GetSection( TEXT("Public"), Buffer, ARRAY_COUNT(Buffer), Tmp );

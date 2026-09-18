@@ -638,6 +638,13 @@ void UGameEngine::NotifyLevelChange()
 ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMap<FString,FString>* TravelInfo, FString& Error )
 {
 	guard(UGameEngine::LoadMap);
+
+	// Put the object hash back in step before a load, which is the one thing
+	// that leans on it hardest: every import in every package the map pulls in
+	// is resolved by name. Objects registered natively can end up in a bucket
+	// that no longer matches their outer, and an entry that cannot be found is
+	// indistinguishable from a missing class.
+	UObject::RelinkObjectHash( TEXT("before map load") );
 	Error = TEXT("");
 	debugf( NAME_Log, TEXT("LoadMap: %s"), *URL.String() );
 	GInitRunaway();
@@ -801,6 +808,11 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 			if( PackageMap->List(i).LocalGeneration!=PackageMap->List(i).RemoteGeneration )
 				Pending->NetDriver->ServerConnection->Logf( TEXT("HAVE GUID=%s GEN=%i"), PackageMap->List(i).Guid.String(), PackageMap->List(i).LocalGeneration );
 	}
+
+	// Tearing the old level down destroys a great many objects, and that is
+	// enough to put the hash out of step again, so check it once more here -
+	// everything below this point looks classes up by name.
+	UObject::RelinkObjectHash( TEXT("after level teardown") );
 
 	// Verify classes.
 	guard(VerifyClasses);

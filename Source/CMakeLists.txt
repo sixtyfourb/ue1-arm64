@@ -21,6 +21,7 @@ option(BUILD_EDITOR "Build Editor (GUI support requires Windows)" ON)
 option(BUILD_NOPENGLDRV "Build NOpenGLDrv" OFF)
 option(BUILD_PVRDRV "Build PVRDrv (Dreamcast only)" OFF)
 option(BUILD_NULLSOUNDDRV "Build SoundDrv (Null driver)" ON)
+option(BUILD_NOPENALDRV "Build NOpenALDrv (OpenAL + libxmp audio)" OFF)
 option(BUILD_AICADRV "Build AICADrv (Dreamcast AICA sound driver)" OFF)
 option(BUILD_DCUTIL "Build DCUtil" ON)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
@@ -283,6 +284,14 @@ endif()
 if(BUILD_NULLSOUNDDRV)
   add_subdirectory(SoundDrv)
   list(APPEND INSTALL_TARGETS SoundDrv)
+endif()
+
+# Ported across from the sibling UE1-64bit tree. This tree shipped with no
+# working audio at all: SoundDrv does not exist, and Source/Audio is the old
+# Galaxy subsystem whose Linux backend talks OSS through linux/soundcard.h.
+if(BUILD_NOPENALDRV)
+  add_subdirectory(NOpenALDrv)
+  list(APPEND INSTALL_TARGETS NOpenALDrv)
 endif()
 
 if(BUILD_AICADRV)

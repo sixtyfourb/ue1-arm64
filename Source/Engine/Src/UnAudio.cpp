@@ -23,6 +23,26 @@ void FSoundData::Load()
 	TLazyArray<BYTE>::Load();
 	unguard;
 	if( Loaded )
+		PostLoadProcess();
+	unguard;
+}
+
+//
+// Derive the duration, apply the quality settings and hand the sample to the
+// audio subsystem.
+//
+// This used to live inside Load(), which only runs it when the array really
+// was lazily deferred (SavedPos>0). On a client it never is: Launch.cpp sets
+// GLazyLoad = !GIsClient, so sound data arrives through normal serialization,
+// Load() is never called, and nothing ever registered a sample. Every
+// PlaySound was then dropped for having no buffer - silent effects throughout,
+// while music, which the driver registers from its own music switch, played
+// fine. USound::PostLoad() calls this now, which is the counterpart to
+// USound::Destroy() unregistering.
+//
+void FSoundData::PostLoadProcess()
+{
+	guard(FSoundData::PostLoadProcess);
 	{
 		// Calculate our duration.
 		guard(1);
@@ -174,6 +194,12 @@ void USound::PostLoad()
 {
 	guard(USound::PostLoad);
 	Super::PostLoad();
+
+	// Counterpart to Destroy() unregistering: get the sample uploaded. See
+	// FSoundData::PostLoadProcess for why Load() cannot be relied on here.
+	if( Audio && !GIsEditor && !Handle && Data.Num() )
+		Data.PostLoadProcess();
+
 	unguard;
 };
 UAudioSubsystem* USound::Audio;
@@ -752,6 +778,7 @@ void UMusic::PostLoad()
 	unguard;
 }
 UAudioSubsystem* UMusic::Audio;
+IMPLEMENT_CLASS(UAnimation);
 IMPLEMENT_CLASS(UMusic);
 
 /*-----------------------------------------------------------------------------

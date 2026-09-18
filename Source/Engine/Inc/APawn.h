@@ -103,3 +103,7 @@ private:
 /*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/
+
+public:
+// Package version 69 (OldUnreal 469) addition - see UnV69Native.cpp.
+DECLARE_FUNCTION(execCheckValidSkinPackage);

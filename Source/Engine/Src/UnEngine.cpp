@@ -73,6 +73,26 @@ void UEngine::InitAudio()
 			delete Audio;
 			Audio = NULL;
 		}
+		else
+		{
+			// USound and UMusic each keep their own static pointer to the
+			// subsystem, and it is the only thing that gets a sample uploaded:
+			// FSoundData::Load() registers the sound through it as the data
+			// arrives. Nothing here ever set them, so they stayed NULL, no
+			// sound was ever registered, and every PlaySound was dropped for
+			// having no buffer - silent effects throughout, while music, which
+			// the driver registers from its own music switch, played fine.
+			USound::Audio = Audio;
+			UMusic::Audio = Audio;
+
+			// Most of the game's sounds come in with the startup packages,
+			// which load well before this point, so their PostLoad ran with
+			// no subsystem to register against. Sweep them now; anything
+			// loaded later registers from PostLoad itself.
+			for( TObjectIterator<USound> It; It; ++It )
+				if( !It->Handle && It->Data.Num() )
+					It->Data.PostLoadProcess();
+		}
 	}
 	unguard;
 }
@@ -129,6 +149,8 @@ void UEngine::Exit()
 	{
 		delete Audio;
 		Audio = NULL;
+		USound::Audio = NULL;
+		UMusic::Audio = NULL;
 	}
 	unguard;
 
@@ -288,7 +310,29 @@ UBOOL UEngine::InputEvent( UViewport* Viewport, EInputKey iKey, EInputAction Sta
 	}
 
 	// Process it.
-	if( Viewport->Console && Viewport->Console->eventKeyEvent( iKey, State, Delta ) )
+	const UBOOL ConsoleAte = Viewport->Console && Viewport->Console->eventKeyEvent( iKey, State, Delta );
+	// Open the menu when nothing else claimed Escape.
+	//
+	// UWindow's only entrance is WindowConsole.KeyEvent testing for a literal
+	// IK_Escape and calling LaunchUWindow(); there is no exec function
+	// ShowMenu() anywhere in UT99's menu packages, so a bound command cannot
+	// reach it. On a handheld with no keyboard that means the menu can never
+	// be opened at all - PortMaster's port only manages it by having gptokeyb
+	// synthesise a real Escape keypress. Calling it here needs no second
+	// process. Guarded on the console not having handled the key, so once a
+	// menu is up its own Escape handling wins and this does not fight it.
+	if( !ConsoleAte && State == IST_Press && iKey == IK_Escape && Viewport->Console )
+	{
+		UObject* C = (UObject*)Viewport->Console;
+		UFunction* Fn = C->FindFunction( FName( TEXT("LaunchUWindow"), FNAME_Find ) );
+		if( Fn )
+		{
+			C->ProcessEvent( Fn, NULL );
+			return 1;
+		}
+	}
+
+	if( ConsoleAte )
 	{
 		//!! fix for continuous mouse-up events!
 		if( State == IST_Release )

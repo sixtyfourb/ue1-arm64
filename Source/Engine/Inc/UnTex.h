@@ -471,6 +471,12 @@ class ENGINE_API UFont : public UObject
 	INT CharactersPerPage;
 	TArray<FFontPage> Pages;
 
+	// Package version 69 (OldUnreal 469) appends five bytes to every font.
+	// Every font the retail GOTY packages ship has them all zero, so what
+	// they mean is not recoverable from the data - they are kept verbatim so
+	// the export's serial size adds up and a v69 font round-trips unchanged.
+	BYTE V69Trailer[5];
+
 	// Constructors.
 	UFont();
 

@@ -406,6 +406,7 @@ private:
 	void AddObject( INT Index );
 	void HashObject();
 	void UnhashObject( INT OuterIndex );
+	INT  RemoveFromHashBucket( INT iHash );
 	void SetLinker( ULinkerLoad* L, INT I );
 
 	// Private systemwide functions.
@@ -470,6 +471,7 @@ public:
 	static UObject* LoadPackage( UObject* InOuter, const TCHAR* Filename, DWORD LoadFlags );
 	static UBOOL SavePackage( UObject* InOuter, UObject* Base, DWORD TopLevelFlags, const TCHAR* Filename, FOutputDevice* Error=GError, ULinkerLoad* Conform=NULL );
 	static void CollectGarbage( DWORD KeepFlags );
+	static void RelinkObjectHash( const TCHAR* Context );
 	static void SerializeRootSet( FArchive& Ar, DWORD KeepFlags, DWORD RequiredFlags );
 	static UBOOL IsReferenced( UObject*& Res, DWORD KeepFlags, UBOOL IgnoreReference );
 	static UBOOL AttemptDelete( UObject*& Res, DWORD KeepFlags, UBOOL IgnoreReference );
@@ -763,6 +765,7 @@ public:
 	DECLARE_FUNCTION(execSqrt)
 	DECLARE_FUNCTION(execSquare)
 	DECLARE_FUNCTION(execFRand)
+	DECLARE_FUNCTION(execRandRange)
 	DECLARE_FUNCTION(execFMin)
 	DECLARE_FUNCTION(execFMax)
 	DECLARE_FUNCTION(execFClamp)

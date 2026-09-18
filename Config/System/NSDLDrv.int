@@ -1,0 +1,7 @@
+[Public]
+Object=(Name=NSDLDrv.NSDLClient,Class=Class,MetaClass=Engine.Client)
+Preferences=(Caption="Display",Parent="Advanced Options",Class=NSDLDrv.NSDLClient,Immediate=True,Category=Display)
+Preferences=(Caption="Joystick",Parent="Advanced Options",Class=NSDLDrv.NSDLClient,Immediate=True,Category=Joystick)
+
+[NSDLClient]
+ClassCaption="SDL2 Client"

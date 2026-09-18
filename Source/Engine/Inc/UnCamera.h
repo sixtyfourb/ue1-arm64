@@ -376,6 +376,7 @@ class ENGINE_API UClient : public UObject
 	FLOAT		MipFactor;
 	INT			TextureLODSet[LODSET_MAX];
 	FLOAT		MinDesiredFrameRate;
+	FLOAT		FontScale;
 
 	// Constructors.
 	UClient();

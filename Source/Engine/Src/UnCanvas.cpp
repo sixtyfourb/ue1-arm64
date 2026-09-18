@@ -174,8 +174,11 @@ static inline void DrawChar
 		if( YL>Frame->Y-Y )
 			{VL+=(Frame->Y-Y-YL)*VL/YL; YL=Frame->Y-Y;}
 
-		// Draw.
-		Frame->Viewport->RenDev->DrawTile( Frame, Info, X, Y, UL, VL, U, V, UL, VL, NULL, Canvas->Z, Color, FPlane(0,0,0,0), Flags );
+		// Draw. The destination size is XL,YL - upstream passed UL,VL here,
+		// which pinned every glyph to one texel per pixel and left the XL,YL
+		// parameters dead. They are honoured now so text can be scaled; a caller
+		// wanting the old behaviour simply passes XL==UL.
+		Frame->Viewport->RenDev->DrawTile( Frame, Info, X, Y, XL, YL, U, V, UL, VL, NULL, Canvas->Z, Color, FPlane(0,0,0,0), Flags );
 	}
 	unguardSlow;
 }
@@ -184,6 +187,24 @@ static inline void DrawChar
 // Draw a string of characters.
 // - returns pixels drawn
 //
+//
+// Scale factor for canvas text. The fonts are 1998 bitmaps blitted one texel
+// to one pixel, which on a 1080p handheld leaves kill messages a couple of
+// millimetres tall. Which font a message uses is chosen by name in script
+// compiled into the retail packages, so it cannot be changed from outside;
+// the size can only be changed here, at the blit. The source stays the glyph
+// and the destination is scaled, with the advance and the reported text
+// extents scaled to match so wrapping and centring still line up.
+//
+static inline FLOAT GetFontScale( UCanvas* Canvas )
+{
+	FLOAT Scale = 1.f;
+	if( Canvas && Canvas->Viewport )
+		Scale = Canvas->Viewport->GetOuterUClient()->FontScale;
+	// Absent from the ini reads back as 0, which means "unset", not "invisible".
+	return Scale > 0.f ? Clamp( Scale, 0.25f, 8.f ) : 1.f;
+}
+
 static inline INT DrawString
 (
 	DWORD			Flags, 
@@ -194,7 +215,8 @@ static inline INT DrawString
 	const TCHAR*	Text, 
 	FPlane			Color, 
 	UBOOL			bClip, 
-	UBOOL			bHandleApersand
+	UBOOL			bHandleApersand,
+	FLOAT			Scale
 )
 {
 	guardSlow(DrawString);
@@ -262,20 +284,26 @@ static inline INT DrawString
 				INT CV     = Char.StartV;
 				INT CUSize = CharWidth;
 				INT CVSize = Char.VSize;
+				// Destination extent; equal to the source when Scale is 1, so the
+				// unscaled path stays exactly what it was.
+				INT DUSize = appRound( CUSize * Scale );
+				INT DVSize = appRound( CVSize * Scale );
 
 				// Draw if it passes clip test.
 				if
 				(	(!bClip)
-				||	(X+CUSize>0 && X<=Canvas->ClipX && Y+CVSize>0 && Y<=Canvas->ClipY) )
+				||	(X+DUSize>0 && X<=Canvas->ClipX && Y+DVSize>0 && Y<=Canvas->ClipY) )
 				{
 					if( bClip )
 					{
-						if( X        < 0.f           ) { CU-=X; CUSize+=X; X=0;  }
-						if( Y        < 0.f           ) { CV-=Y; CVSize+=Y; Y=0;  }
-						if( X+CUSize > Canvas->ClipX ) { CUSize=(INT) (Canvas->ClipX-X); }
-						if( Y+CVSize > Canvas->ClipY ) { CVSize=(INT) (Canvas->ClipY-Y); } 
+						// Clip on screen and take the matching bite out of the glyph,
+						// so a part-clipped character is cropped, not squashed.
+						if( X        < 0             ) { INT C=-X;                            CU+=appRound(C/Scale); CUSize-=appRound(C/Scale); DUSize-=C; X=0; }
+						if( Y        < 0             ) { INT C=-Y;                            CV+=appRound(C/Scale); CVSize-=appRound(C/Scale); DVSize-=C; Y=0; }
+						if( X+DUSize > Canvas->ClipX ) { INT C=(INT)(X+DUSize-Canvas->ClipX); DUSize-=C;             CUSize-=appRound(C/Scale); }
+						if( Y+DVSize > Canvas->ClipY ) { INT C=(INT)(Y+DVSize-Canvas->ClipY); DVSize-=C;             CVSize-=appRound(C/Scale); }
 					}
-					DrawChar( Flags, Canvas, Info, (INT) (Canvas->OrgX+X), (INT) (Canvas->OrgY+Y), CUSize, CVSize, CU, CV, CUSize, CVSize, Color );
+					DrawChar( Flags, Canvas, Info, (INT) (Canvas->OrgX+X), (INT) (Canvas->OrgY+Y), DUSize, DVSize, CU, CV, CUSize, CVSize, Color );
 				}
 
 				// Update underline status.
@@ -283,7 +311,7 @@ static inline INT DrawString
 					CharWidth = UnderlineWidth;
 
 				if( !bUnderlineNext )
-					LineX += (INT) (CharWidth + Canvas->SpaceX);
+					LineX += (INT) (appRound( CharWidth * Scale ) + Canvas->SpaceX);
 				else
 					UnderlineWidth = Char.USize;
 
@@ -304,7 +332,7 @@ static inline INT DrawString
 //
 // Get a character's dimensions.
 //
-static inline void GetCharSize( UFont* Font, TCHAR InCh, INT& Width, INT& Height )
+static inline void GetCharSize( UFont* Font, TCHAR InCh, INT& Width, INT& Height, FLOAT Scale )
 {
 	guardSlow(GetCharSize);
 	Width = 0;
@@ -315,8 +343,8 @@ static inline void GetCharSize( UFont* Font, TCHAR InCh, INT& Width, INT& Height
 	if( Page<Font->Pages.Num() && Index<Font->Pages(Page).Characters.Num() )
 	{
 		FFontCharacter& Char = Font->Pages(Page).Characters(Index);
-		Width = Char.USize;
-		Height = Char.VSize;
+		Width = appRound( Char.USize * Scale );
+		Height = appRound( Char.VSize * Scale );
 	}
 	unguardSlow;
 }
@@ -333,6 +361,7 @@ void VARARGS UCanvas::WrappedPrint( ERenderStyle Style, INT& XL, INT& YL, UFont*
 	if( (Font==LargeFont || Font==BigFont) && appStricmp(UObject::GetLanguage(),TEXT("INT")) )
 		Font = MedFont;//BigFont;!!
 	check(Font);
+	const FLOAT TextScale = GetFontScale( this );
 	FPlane DrawColor = Color.Plane();
 
 	// Generate flags.
@@ -354,7 +383,7 @@ void VARARGS UCanvas::WrappedPrint( ERenderStyle Style, INT& XL, INT& YL, UFont*
 		for( iTestWord=0; Text[iTestWord]!=0 && Text[iTestWord]!='\n'; )
 		{
 			INT ChW, ChH;
-			GetCharSize(Font, Text[iTestWord], ChW, ChH);
+			GetCharSize(Font, Text[iTestWord], ChW, ChH, TextScale);
 			TestXL              += (INT) (ChW + SpaceX);
 			TestYL               = Max( TestYL, ChH + (INT)SpaceY );
 			if( TestXL>ClipX )
@@ -377,7 +406,7 @@ void VARARGS UCanvas::WrappedPrint( ERenderStyle Style, INT& XL, INT& YL, UFont*
 		{
 			FString TextLine(Text);
 			INT LineX = Center ? (INT) (CurX+(ClipX-CleanXL)/2) : (INT) (CurX);
-			LineX += DrawString( PolyFlags, this, Font, LineX, (INT) CurY, *(TextLine.Left(iCleanWordEnd)), DrawColor, 0, 0 );
+			LineX += DrawString( PolyFlags, this, Font, LineX, (INT) CurY, *(TextLine.Left(iCleanWordEnd)), DrawColor, 0, 0, TextScale );
 			CurX = LineX;
 		}
 
@@ -707,7 +736,7 @@ void UCanvas::execDrawTextClipped( FFrame& Stack, RESULT_DECL )
 	:	                           0);
 
 	FPlane DrawColor = Color.Plane();
-	DrawString( PolyFlags, this, Font, (INT) CurX, (INT) CurY, *InText, DrawColor, 1, CheckHotKey );
+	DrawString( PolyFlags, this, Font, (INT) CurX, (INT) CurY, *InText, DrawColor, 1, CheckHotKey, GetFontScale(this) );
 
 	unguardexec;
 }
@@ -733,7 +762,7 @@ void UCanvas::execTextSize( FFrame& Stack, RESULT_DECL )
 
 	for( INT i=0; (*InText)[i]; i++)
 	{
-		GetCharSize( Font, (*InText)[i], W, H );
+		GetCharSize( Font, (*InText)[i], W, H, GetFontScale(this) );
 		
 		XLi += W;
 		if(YLi < H)

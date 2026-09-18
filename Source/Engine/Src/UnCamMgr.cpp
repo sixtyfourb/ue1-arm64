@@ -60,6 +60,7 @@ void UClient::StaticConstructor()
 	new(GetClass(),TEXT("MinDesiredFrameRate"),	RF_Public)UFloatProperty(CPP_PROPERTY(MinDesiredFrameRate	), TEXT("Display"), CPF_Config );
 	new(GetClass(),TEXT("Decals"),				RF_Public)UBoolProperty (CPP_PROPERTY(Decals				), TEXT("Display"), CPF_Config );
 	new(GetClass(),TEXT("NoDynamicLights"),		RF_Public)UBoolProperty (CPP_PROPERTY(NoDynamicLights		), TEXT("Display"), CPF_Config );
+	new(GetClass(),TEXT("FontScale"),			RF_Public)UFloatProperty(CPP_PROPERTY(FontScale			), TEXT("Display"), CPF_Config );
 
 	unguard;
 }

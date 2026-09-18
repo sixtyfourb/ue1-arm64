@@ -14,7 +14,9 @@
 ------------------------------------------------------------------------------*/
 
 UFont::UFont()
-{}
+{
+	appMemzero( V69Trailer, sizeof(V69Trailer) );
+}
 
 void UFont::Serialize( FArchive& Ar )
 {
@@ -24,6 +26,9 @@ void UFont::Serialize( FArchive& Ar )
 	GLazyLoad = 1;
 	Ar << Pages << CharactersPerPage;
 	check(!(CharactersPerPage&(CharactersPerPage-1)));
+	if( Ar.Ver() >= 69 )
+		for( INT i=0; i<ARRAY_COUNT(V69Trailer); i++ )
+			Ar << V69Trailer[i];
 	if( !GLazyLoad )
 		for( INT c=0,p=0; c<256; c+=CharactersPerPage,p++ )
 			if( p<Pages.Num() && Pages(p).Texture )

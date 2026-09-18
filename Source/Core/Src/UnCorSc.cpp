@@ -2136,6 +2136,26 @@ void UObject::execFRand( FFrame& Stack, RESULT_DECL )
 }	
 IMPLEMENT_FUNCTION( UObject, 195, execFRand );
 
+// Added by OldUnreal's 469 patch, and the only native the version 69 packages
+// declare that version 68 does not - the whole script-side ABI difference
+// between the two, measured by extracting and diffing every package's source.
+// Without it UFunction::Bind hits check(GNatives[iNative]!=0) while loading
+// Core, which is the unexplained "Failed to load" and appError that version 69
+// data produces.
+void UObject::execRandRange( FFrame& Stack, RESULT_DECL )
+{
+	guardSlow(UObject::execRandRange);
+
+	P_GET_FLOAT(Min);
+	P_GET_FLOAT(Max);
+	P_FINISH;
+
+	*(FLOAT*)Result = Min + (Max - Min) * appFrand();
+
+	unguardexecSlow;
+}
+IMPLEMENT_FUNCTION( UObject, 1033, execRandRange );
+
 void UObject::execFMin( FFrame& Stack, RESULT_DECL )
 {
 	guardSlow(UObject::execFMin);

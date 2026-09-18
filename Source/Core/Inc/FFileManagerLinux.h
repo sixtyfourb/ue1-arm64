@@ -295,6 +295,22 @@ public:
 		return rmdir(TCHAR_TO_ANSI(Path))==0 || (errno==ENOENT && !RequireExists);
 		unguard;
 	}
+	// Retail data is full of mixed-case filenames - DmAriza.unr against the
+	// "DM*" prefix UMenu builds from a game type's MapPrefix, CREDITS.UTX
+	// against "*.utx" - and every wildcard here comes from script, .int files
+	// or an ini written for a case-insensitive filesystem. The matching below
+	// is therefore case-insensitive throughout; this is the one comparison
+	// the engine does not already have a helper for.
+	static const TCHAR* StrFindNoCase( const TCHAR* Haystack, const TCHAR* Needle )
+	{
+		INT NeedleLen = appStrlen( Needle );
+		if( !NeedleLen )
+			return Haystack;
+		for( ; *Haystack; Haystack++ )
+			if( appStrnicmp( Haystack, Needle, NeedleLen )==0 )
+				return Haystack;
+		return NULL;
+	}
 	TArray<FString> FindFiles( const TCHAR* Filename, UBOOL Files, UBOOL Directories )
 	{
 		guard(FFileManagerLinux::FindFiles);
@@ -355,14 +371,13 @@ public:
 			else if( File[0] == '*' )
 			{
 				// "*.ext" filename.
-				if( appStrstr( Direntp->d_name, (File + 1) ) != NULL )
+				if( StrFindNoCase( Direntp->d_name, (File + 1) ) != NULL )
 					Match = true;
 			}
 			else if( File[appStrlen( File ) - 1] == '*' )
 			{
 				// "name.*" filename.
-				if( appStrncmp( Direntp->d_name, File, appStrlen( File ) - 1 ) == 
-					0 )
+				if( appStrnicmp( Direntp->d_name, File, appStrlen( File ) - 1 ) == 0 )
 					Match = true;
 			}
 			else if( appStrstr( File, "*" ) != NULL )
@@ -375,18 +390,18 @@ public:
 				TCHAR prefix[256];
 				appStrncpy( prefix, File, starpos );
 				star++;
-				if( appStrncmp( Direntp->d_name, prefix, starpos - 1 ) == 0 )
+				if( appStrnicmp( Direntp->d_name, prefix, starpos - 1 ) == 0 )
 				{
 					// part before * matches
 					TCHAR* postfix = Direntp->d_name + (appStrlen(Direntp->d_name) - starlen) + 1;
-					if ( appStrcmp( postfix, star ) == 0 )
+					if ( appStricmp( postfix, star ) == 0 )
 						Match = true;
 				}
 			}
 			else
 			{
 				// Literal filename.
-				if( appStrcmp( Direntp->d_name, File ) == 0 )
+				if( appStricmp( Direntp->d_name, File ) == 0 )
 					Match = true;
 			}
 

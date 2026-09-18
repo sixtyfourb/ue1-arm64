@@ -34,7 +34,15 @@ const BYTE UNSDLViewport::JoyButtonMap[SDL_CONTROLLER_BUTTON_MAX] =
 	/* BUTTON_Y             */ IK_Joy4,
 	/* BUTTON_BACK          */ IK_Joy5,
 	/* BUTTON_GUIDE         */ IK_Joy6,
-	/* BUTTON_START         */ IK_Joy7,
+	// Escape, not Joy7. UWindow has exactly one entrance: WindowConsole's
+	// KeyEvent tests for a literal EInputKey.IK_Escape and calls
+	// LaunchUWindow() there. It is not reachable from a bound command - there
+	// is no exec function ShowMenu() anywhere in UT99's menu packages, so the
+	// stock "Joy7=ShowMenu" binding is silently inert and the menu simply
+	// cannot be opened from a pad. PortMaster's port papers over this by
+	// having gptokeyb synthesise a real Escape keypress; doing it here means
+	// no second process.
+	/* BUTTON_START         */ IK_Escape,
 	/* BUTTON_LEFTSTICK     */ IK_Joy8,
 	/* BUTTON_RIGHTSTICK    */ IK_Joy9,
 	/* BUTTON_LEFTSHOULDER  */ IK_Joy10,
@@ -50,17 +58,24 @@ const BYTE UNSDLViewport::JoyButtonMap[SDL_CONTROLLER_BUTTON_MAX] =
 //
 const BYTE UNSDLViewport::JoyButtonMapUI[SDL_CONTROLLER_BUTTON_MAX] =
 {
+	// South accepts, west clicks. UWindow is a mouse UI - its menu bar, list
+	// rows and most buttons only answer WM_LMouseDown at MouseX/MouseY - so a
+	// click has to be on the pad somewhere, but Enter is the more natural
+	// thing under the thumb once a control has focus.
 	/* BUTTON_A             */ IK_Enter,
 	/* BUTTON_B             */ IK_Escape,
-	/* BUTTON_X             */ IK_N,
+	/* BUTTON_X             */ IK_LeftMouse,
 	/* BUTTON_Y             */ IK_Y,
 	/* BUTTON_BACK          */ IK_Escape,
 	/* BUTTON_GUIDE         */ IK_Escape,
 	/* BUTTON_START         */ IK_Escape,
 	/* BUTTON_LEFTSTICK     */ IK_Joy8,
 	/* BUTTON_RIGHTSTICK    */ IK_Joy9,
-	/* BUTTON_LEFTSHOULDER  */ IK_Joy10,
-	/* BUTTON_RIGHTSHOULDER */ IK_Joy11,
+	// Both shoulders send Tab: UWindowDialogControl::KeyDown implements
+	// IK_Tab as "focus TabNext" and has no reverse, so there is nothing for a
+	// back-tab to call even though TabPrev exists as a variable.
+	/* BUTTON_LEFTSHOULDER  */ IK_Tab,
+	/* BUTTON_RIGHTSHOULDER */ IK_Tab,
 	/* BUTTON_DPAD_UP       */ IK_Up,
 	/* BUTTON_DPAD_DOWN     */ IK_Down,
 	/* BUTTON_DPAD_LEFT     */ IK_Left,
@@ -449,6 +464,12 @@ void UNSDLViewport::OpenWindow( DWORD InParentWindow, UBOOL Temporary, INT NewX,
 		}
 
 		SDL_ShowWindow( hWnd );
+		// Ask for input focus explicitly. Showing a window does not raise it,
+		// and under a handheld compositor the game can end up visible and
+		// fullscreen while focus stays with the session - at which point no
+		// keyboard event is ever delivered and the game looks frozen on
+		// whatever screen it started on.
+		SDL_RaiseWindow( hWnd );
 
 		// Get this window's display parameters.
 		SDL_DisplayMode DisplayMode;
@@ -845,6 +866,39 @@ UBOOL UNSDLViewport::TickInput()
 	const FLOAT CurTime = appSeconds();
 	const FLOAT DeltaTime = CurTime - InputUpdateTime;
 
+	// UWindow takes its cursor from Viewport.WindowsMouseX/Y when the platform
+	// advertises an absolute pointer, and otherwise accumulates relative
+	// IK_MouseX/IK_MouseY deltas. This port advertised neither, so the menu ran
+	// on relative deltas - which is why dragging a finger moved the cursor the
+	// wrong way on both axes. Absolute coordinates are what a touchscreen
+	// actually reports, and they track one to one.
+	if( bShowWindowsMouse )
+	{
+		// Mouselook capture has to come off, or there is no absolute position
+		// to report and the pointer stays warped to the centre.
+		if( SDL_GetRelativeMouseMode() )
+			SDL_SetRelativeMouseMode( SDL_FALSE );
+		bWindowsMouseAvailable = 1;
+
+		// The left stick drives the cursor too, for a handheld with no mouse.
+		const FLOAT StickX = JoyAxis[SDL_CONTROLLER_AXIS_LEFTX] / 32767.f;
+		const FLOAT StickY = JoyAxis[SDL_CONTROLLER_AXIS_LEFTY] / 32767.f;
+		const FLOAT Dead   = Client->DeadZoneXYZ;
+		const FLOAT Speed  = 900.f;   // pixels per second at full deflection
+		if( Abs(StickX) > Dead || Abs(StickY) > Dead )
+		{
+			if( Abs(StickX) > Dead ) WindowsMouseX += StickX * Speed * DeltaTime;
+			if( Abs(StickY) > Dead ) WindowsMouseY += StickY * Speed * DeltaTime;
+			WindowsMouseX = Clamp<FLOAT>( WindowsMouseX, 0.f, (FLOAT)(SizeX - 1) );
+			WindowsMouseY = Clamp<FLOAT>( WindowsMouseY, 0.f, (FLOAT)(SizeY - 1) );
+			SDL_WarpMouseInWindow( hWnd, (int)WindowsMouseX, (int)WindowsMouseY );
+		}
+	}
+	else
+	{
+		bWindowsMouseAvailable = 0;
+	}
+
 	while( SDL_PollEvent( &Ev ) )
 	{
 		switch( Ev.type )
@@ -864,6 +918,15 @@ UBOOL UNSDLViewport::TickInput()
 				break;
 			case SDL_KEYDOWN:
 			case SDL_KEYUP:
+				// Logged alongside pad events deliberately. A handheld's
+				// compositor or Steam Input can be configured to translate the
+				// pad into keys and mouse, and then the pad is working while
+				// the game never sees a single controller event. Without both
+				// sides in the log the two cases look identical.
+				if( Client->LogPadInput )
+					debugf( TEXT("key: scancode %i %s -> key %i"), Ev.key.keysym.scancode,
+							( Ev.type == SDL_KEYDOWN ) ? TEXT("down") : TEXT("up"),
+							KeyMap[Ev.key.keysym.scancode] );
 				CauseInputEvent( KeyMap[Ev.key.keysym.scancode], ( Ev.type == SDL_KEYDOWN ) ? IST_Press : IST_Release );
 				break;
 			case SDL_MOUSEBUTTONDOWN:
@@ -873,7 +936,8 @@ UBOOL UNSDLViewport::TickInput()
 				// paused->unpaused transition, which misses the initial state
 				// and silently fails when the window lacks mouse focus.)
 				if( Ev.type == SDL_MOUSEBUTTONDOWN && !SDL_GetRelativeMouseMode()
-					&& Client->CaptureMouse && Actor && !Actor->bShowMenu )
+					&& Client->CaptureMouse && Actor && !Actor->bShowMenu
+					&& !bShowWindowsMouse )
 					SetMouseCapture( 1, 1, 0 );
 				CauseInputEvent( MouseButtonMap[Ev.button.button], ( Ev.type == SDL_MOUSEBUTTONDOWN ) ? IST_Press : IST_Release );
 				break;
@@ -893,13 +957,37 @@ UBOOL UNSDLViewport::TickInput()
 					}
 				}
 				break;
+			// A pad appearing after startup is the normal case on a Steam
+			// handheld: the compositor hands a focused game its own virtual
+			// pad, and the one present at launch goes quiet. SDL only reports
+			// buttons for devices that are open, so without this the game sees
+			// nothing at all and the pad looks broken.
+			case SDL_CONTROLLERDEVICEADDED:
+				Client->OpenController( Ev.cdevice.which );
+				break;
+			case SDL_CONTROLLERDEVICEREMOVED:
+				// which is an instance id here, not a device index.
+				Client->CloseController( Ev.cdevice.which );
+				break;
 			case SDL_CONTROLLERBUTTONDOWN:
 			case SDL_CONTROLLERBUTTONUP:
 				{
-					// HACK: Swap to alternate bindings when in menus, but not when waiting for keypress in the keybind menu.
-					// Note: GetMainFrame() is Unreal 1 specific, disabled for UT99
-					const UBOOL bIsInUI = 0; // Console && ((UObject*)Console)->GetMainFrame() && ...
+					// Swap to the menu bindings while a menu is up, so the d-pad
+					// works as arrows and A/B as Enter/Escape.
+					//
+					// The original test called GetMainFrame(), which is Unreal
+					// 1 only, so this was left hard-disabled for UT99 - the
+					// whole UI half of the pad support was dead. UPlayer, which
+					// UViewport derives from, carries bShowWindowsMouse
+					// natively, and UWindow raises it precisely when it puts a
+					// menu on screen and wants a cursor. That makes it the
+					// signal we want, with no script reflection.
+					const UBOOL bIsInUI = bShowWindowsMouse;
 					const BYTE* JoyMap = bIsInUI ? JoyButtonMapUI : JoyButtonMap;
+					if( Client->LogPadInput )
+						debugf( TEXT("pad: button %i %s -> key %i%s"), Ev.cbutton.button,
+								( Ev.type == SDL_CONTROLLERBUTTONDOWN ) ? TEXT("down") : TEXT("up"),
+								JoyMap[Ev.cbutton.button], bIsInUI ? TEXT(" (ui map)") : TEXT("") );
 					CauseInputEvent( JoyMap[Ev.cbutton.button], ( Ev.type == SDL_CONTROLLERBUTTONDOWN ) ? IST_Press : IST_Release );
 				}
 				break;
@@ -934,6 +1022,10 @@ UBOOL UNSDLViewport::TickInput()
 				if( !SDL_GetRelativeMouseMode() )
 				{
 					// If cursor isn't captured, just do MousePosition.
+					// Record it for UWindow as well - nothing else sets these,
+					// and the menu reads them every frame.
+					WindowsMouseX = Ev.motion.x;
+					WindowsMouseY = Ev.motion.y;
 					Client->Engine->MousePosition( this, 0, Ev.motion.x, Ev.motion.y );
 				}
 				else
@@ -965,7 +1057,18 @@ UBOOL UNSDLViewport::TickInput()
 			const FLOAT FltValue = Clamp( Value / 32767.f, -1.f, 1.f );
 			FLOAT Scale = ( Key >= IK_JoyX && Key <= IK_JoyZ ) ? Client->ScaleXYZ : Client->ScaleRUV;
 			Scale *= JoyAxisDefaultScale[i] * DeltaTime;
-			if ( ( Client->InvertV && Key == IK_JoyV ) || ( Client->InvertY && Key == IK_JoyY ) )
+			// Honour the game's own "Invert Mouse" checkbox for the look
+			// stick as well as the mouse. UT99 applies bInvertMouse only to
+			// SmoothMouseY, so a pad had no in-game invert at all - the
+			// Preferences tabs are compiled UnrealScript and cannot be
+			// extended, and the driver's own InvertV is reachable only by
+			// editing the ini. Composed with XOR so the two settings do not
+			// silently cancel each other: either one inverts, both together
+			// return to normal.
+			UBOOL bInvertLook = Client->InvertV;
+			if ( Key == IK_JoyV && Actor && Actor->bInvertMouse )
+				bInvertLook = !bInvertLook;
+			if ( ( bInvertLook && Key == IK_JoyV ) || ( Client->InvertY && Key == IK_JoyY ) )
 				Scale = -Scale;
 			CauseInputEvent( Key, IST_Axis, FltValue * Scale );
 		}

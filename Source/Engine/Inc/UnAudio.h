@@ -53,6 +53,7 @@ class ENGINE_API FSoundData : public TLazyArray<BYTE>
 public:
 	USound* Owner;
 	void Load();
+	void PostLoadProcess();
 	FLOAT GetPeriod();
 	FSoundData( USound* InOwner )
 	: Owner( InOwner )
@@ -72,6 +73,12 @@ class ENGINE_API USound : public UObject
 	INT			OriginalSize;
 	FLOAT       Duration;
 	void*		Handle;
+	// Set by the audio driver when it uploads the sample, from the WAV's loop
+	// chunk - the only place a UT99 sound says whether it loops. Native only:
+	// no script property is registered for it and Serialize() does not touch
+	// it, so it costs nothing but a driver-owned flag beside Handle, which is
+	// driver-owned too. UE1-64bit's USound carries the same field.
+	UBOOL		Looping;
 	static UAudioSubsystem* Audio;
 
 	// Constructor.
@@ -79,6 +86,7 @@ class ENGINE_API USound : public UObject
 	: Data( this )
 	{
 		Duration = -1.f;
+		Looping  = 0;
 	}
 
 	// Duration.
@@ -102,6 +110,21 @@ class ENGINE_API USound : public UObject
 //
 // A song.
 //
+// OldUnreal's 469 added a native class Engine.Animation, and its Engine.u
+// imports it. Nothing in that package derives from it or holds an instance -
+// checked against the export table - so a name to resolve the import against
+// is all the loader needs. Without it the import fails and the whole package
+// load is abandoned: "Can't find Class in file 'Class Engine.Animation'".
+//
+// A stub, deliberately: 469's own layout is unknown (its engine source is not
+// public), so inventing members would be guesswork. If content turns up that
+// really instantiates one, this has to grow to match.
+class ENGINE_API UAnimation : public UObject
+{
+	DECLARE_CLASS(UAnimation,UObject,CLASS_SafeReplace)
+	UAnimation() {}
+};
+
 class ENGINE_API UMusic : public UObject
 {
 	DECLARE_CLASS(UMusic,UObject,CLASS_SafeReplace)

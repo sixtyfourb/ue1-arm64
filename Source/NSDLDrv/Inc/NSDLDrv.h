@@ -108,6 +108,11 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	UBOOL StartupFullscreen;
 	UBOOL UseJoystick;
 	UBOOL InvertY;
+	// Logs every pad button and axis event to the log. Off by default; a pad
+	// that enumerates but sends nothing looks identical to one that is not
+	// bound, and this is the only way to tell them apart on a handheld with
+	// no keyboard.
+	UBOOL LogPadInput;
 	UBOOL InvertV;
 	FLOAT ScaleXYZ;
 	FLOAT ScaleRUV;
@@ -140,11 +145,20 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	void TryRenderDevice( UViewport* Viewport, const char* ClassName, UBOOL Fullscreen );
 	const TArray<SDL_Rect>& GetDisplayResolutions();
 	inline SDL_GameController* GetController() { return Controller; }
+	// Pads come and go while the game runs: on a Steam handheld the pad that
+	// exists at startup is not necessarily the one the compositor hands to a
+	// focused game, and SDL only reports buttons for devices that are open.
+	void OpenController( INT DeviceIndex );
+	void CloseController( SDL_JoystickID InstanceId );
 	inline const SDL_DisplayMode& GetDefaultDisplayMode() const { return DefaultDisplayMode; }
 
 private:
 	// Variables.
 	SDL_GameController* Controller;
+	// Every pad that is open, not just the first. Which one is live cannot be
+	// known in advance, and events carry no window, so opening them all and
+	// taking whatever arrives is both simpler and more reliable than choosing.
+	TArray<SDL_GameController*> Controllers;
 	SDL_DisplayMode DefaultDisplayMode;
 	TArray<SDL_Rect> DisplayResolutions;
 };

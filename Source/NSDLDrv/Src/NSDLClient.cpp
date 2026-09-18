@@ -55,6 +55,13 @@ UNSDLClient::UNSDLClient()
 	ScaleRUV = 100.f;
 	DeadZoneXYZ = 0.1f;
 	DeadZoneRUV = 0.1f;
+	// Not driven by the ini, despite being registered as a config property:
+	// this constructor runs *after* the config is loaded, so a C++ default
+	// always wins and is then saved back over whatever the user set. The
+	// environment survives that, and a command line switch is there for
+	// running the binary by hand.
+	LogPadInput = ( getenv( "UT99_LOG_PAD" ) != NULL )
+	           || ParseParam( appCmdLine(), TEXT("LOGPAD") );
 	unguard;
 }
 
@@ -72,6 +79,12 @@ void UNSDLClient::Init( UEngine* InEngine )
 
 	Controller = NULL;
 
+	// Handhelds running a gamescope session take input focus away from the
+	// game, and SDL2 then discards every joystick event it reads rather than
+	// queueing it. The symptom is a pad that enumerates correctly and never
+	// sends anything. Must be set before SDL_Init.
+	SDL_SetHint( SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1" );
+
 	if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
 	{
 		appErrorf( "SDL_Init failed: %s", SDL_GetError() );
@@ -80,8 +93,15 @@ void UNSDLClient::Init( UEngine* InEngine )
 
 	atexit( SDL_Quit );
 
-	if( SDL_NumJoysticks() > 0 )
-		Controller = SDL_GameControllerOpen( 0 );
+	// Open the first device that is actually a game controller and actually
+	// opens, rather than assuming index 0. A handheld can present several
+	// virtual pads at once - InputPlumber's, plus the ones Steam layers on top
+	// - and the live one is often not the first. Taking index 0 on trust gets
+	// a handle that never reports a button.
+	const INT NumJoysticks = SDL_NumJoysticks();
+	debugf( NAME_Init, TEXT("Joysticks found: %i"), NumJoysticks );
+	for( INT i = 0; i < NumJoysticks; i++ )
+		OpenController( i );
 
 	SDL_GameControllerEventState( SDL_ENABLE );
 
@@ -89,6 +109,69 @@ void UNSDLClient::Init( UEngine* InEngine )
 	SDL_EventState( SDL_TEXTINPUT, SDL_ENABLE );
 
 	SDL_GetDesktopDisplayMode( DefaultDisplay, &DefaultDisplayMode );
+
+	unguard;
+}
+
+//
+// Open a pad by device index, if it is one and it is not open already.
+//
+void UNSDLClient::OpenController( INT DeviceIndex )
+{
+	guard(UNSDLClient::OpenController);
+
+	const char* JoyName = SDL_JoystickNameForIndex( DeviceIndex );
+	if( !SDL_IsGameController( DeviceIndex ) )
+	{
+		debugf( NAME_Init, TEXT("pad: device %i (%s) has no game controller mapping, ignored"),
+				DeviceIndex, JoyName ? JoyName : "unnamed" );
+		return;
+	}
+
+	SDL_GameController* Pad = SDL_GameControllerOpen( DeviceIndex );
+	if( !Pad )
+	{
+		debugf( NAME_Init, TEXT("pad: device %i (%s) failed to open: %s"),
+				DeviceIndex, JoyName ? JoyName : "unnamed", SDL_GetError() );
+		return;
+	}
+
+	// Reopening a device returns the handle already held.
+	for( INT i = 0; i < Controllers.Num(); i++ )
+		if( Controllers(i) == Pad )
+			return;
+
+	Controllers.AddItem( Pad );
+	if( !Controller )
+		Controller = Pad;
+	debugf( NAME_Init, TEXT("pad: opened device %i (%s), %i now open"),
+			DeviceIndex, JoyName ? JoyName : "unnamed", Controllers.Num() );
+
+	unguard;
+}
+
+//
+// Close a pad that has gone away, by instance id.
+//
+void UNSDLClient::CloseController( SDL_JoystickID InstanceId )
+{
+	guard(UNSDLClient::CloseController);
+
+	SDL_GameController* Pad = SDL_GameControllerFromInstanceID( InstanceId );
+	if( !Pad )
+		return;
+
+	for( INT i = 0; i < Controllers.Num(); i++ )
+		if( Controllers(i) == Pad )
+		{
+			Controllers.Remove( i );
+			break;
+		}
+	if( Controller == Pad )
+		Controller = Controllers.Num() ? Controllers(0) : NULL;
+
+	SDL_GameControllerClose( Pad );
+	debugf( NAME_Init, TEXT("pad: device removed, %i still open"), Controllers.Num() );
 
 	unguard;
 }

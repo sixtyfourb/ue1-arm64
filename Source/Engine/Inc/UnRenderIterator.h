@@ -16,6 +16,11 @@ class ENGINE_API URenderIterator : public UObject
 	INT				MaxItems;
 	INT				Index;
 	APlayerPawn*	Observer;
+	// Script calls this one "Actor Frame", transient, and says outright that
+	// it is a generic pointer kept for binary compatibility - the renderer
+	// stores an FSceneNode* here. Version 69 added it, so the slot has to
+	// exist or every property after it sits at the wrong offset.
+	class FSceneNode*	Frame;
 
 	// Constructor.
 	URenderIterator();

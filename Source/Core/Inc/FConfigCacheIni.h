@@ -121,6 +121,40 @@ public:
 		else if( appStricmp(Filename,TEXT("System.ini"))==0 )
 			appStrcpy(Filename,*SystemIni);
 
+		// Config and localization files are opened by bare name, so they
+		// resolve against the working directory - and appInit sets that to the
+		// directory the executable lives in. That is fine for a normal install,
+		// where System/ holds the binary, the .ini files and the .int files
+		// together. It is wrong as soon as the engine and the game data are
+		// separate, as they are when the engine ships as an AppImage and the
+		// retail files sit in the user's data directory: every .int lookup
+		// misses, Localize() returns its <?int?...?> placeholder for every
+		// string, and the menus come up with no text on them.
+		//
+		// So fall back to the directories the package paths already point at.
+		// The .int files live beside the .u files they describe, which is
+		// exactly what Paths enumerates.
+		if( GSys && GFileManager->FileSize(Filename)<0 )
+		{
+			for( INT i=0; i<GSys->Paths.Num(); i++ )
+			{
+				TCHAR Candidate[256];
+				appStrncpy( Candidate, *GSys->Paths(i), ARRAY_COUNT(Candidate) );
+				TCHAR* Star = appStrstr( Candidate, TEXT("*") );
+				if( !Star )
+					continue;
+				*Star = 0;
+				if( appStrlen(Candidate) + appStrlen(Filename) >= ARRAY_COUNT(Candidate) )
+					continue;
+				appStrcat( Candidate, Filename );
+				if( GFileManager->FileSize(Candidate)>=0 )
+				{
+					appStrcpy( Filename, Candidate );
+					break;
+				}
+			}
+		}
+
 		// Get file.
 		FConfigFile* Result = TMap<FString,FConfigFile>::Find( Filename );
 		if( !Result && (CreateIfNotFound || GFileManager->FileSize(Filename)>=0)  )

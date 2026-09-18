@@ -1689,13 +1689,10 @@ void AActor::ProcessDemoRecFunction( UFunction* Function, void* Parms, FFrame* S
 	if(IsNetClient)
 		Exchange(RemoteRole, Role);
 	bDemoRecording = 1;
-	bClientDemoRecording = IsNetClient;
 	FFrame( this, Function->GetOwnerClass(), Function->RepOffset, NULL ).Step( this, &Val );
 	bDemoRecording = 0;
-	bClientDemoRecording = 0;
 	if(IsNetClient)
 		Exchange(RemoteRole, Role);
-	bClientDemoNetFunc = 0;
 	if( !Val )
 		return;
 

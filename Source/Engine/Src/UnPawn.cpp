@@ -1021,12 +1021,8 @@ void APawn::execPollMoveToward( FFrame& Stack, RESULT_DECL )
 	Focus = Destination;
 	rotateToward(Focus);
 	FLOAT oldDesiredSpeed = DesiredSpeed;
-	if ( bAdvancedTactics && (Physics == PHYS_Walking) )
-		eventAlterDestination();
 	if( moveToward(Destination) )
 		GetStateFrame()->LatentAction = 0;
-	if ( bAdvancedTactics && (Physics == PHYS_Walking) )
-		Destination = MoveTarget->Location;
 	if( MoveTarget->IsA(APawn::StaticClass()) )
 	{
 		DesiredSpeed = oldDesiredSpeed; //don't slow down when moving toward a pawn
@@ -1125,8 +1121,6 @@ void APawn::execPollStrafeFacing( FFrame& Stack, RESULT_DECL )
 	Focus = FaceTarget->Location;
 	FVector RealDest = Destination;
 	rotateToward( Focus );
-	if ( bAdvancedTactics && (Physics == PHYS_Walking) )
-		eventAlterDestination();
 	if( moveToward(Destination) )
 		GetStateFrame()->LatentAction = 0;
 	Destination = RealDest;

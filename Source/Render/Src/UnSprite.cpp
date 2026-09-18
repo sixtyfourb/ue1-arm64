@@ -850,10 +850,8 @@ void URender::DrawActorSprite( FSceneNode* Frame, FDynamicSprite* Sprite )
 				);
 				Exchange( Weapon->ThirdPersonMesh, Weapon->Mesh );
 				Exchange( Weapon->ThirdPersonScale, Weapon->DrawScale );
-				if ( Weapon->bSteadyFlash3rd )
-					Weapon->bSteadyToggle = !Weapon->bSteadyToggle;
-				if ( (Weapon->bSteadyFlash3rd && (!Weapon->bToggleSteadyFlash || Weapon->bSteadyToggle)) 
-					|| (!Weapon->bFirstFrame && (Weapon->FlashCount != Weapon->OldFlashCount)) )
+				if ( Weapon->bSteadyFlash3rd
+					|| (Weapon->FlashCount != Weapon->OldFlashCount) )
 				{
 					if ( Weapon->MuzzleFlashMesh )
 					{
@@ -894,7 +892,6 @@ void URender::DrawActorSprite( FSceneNode* Frame, FDynamicSprite* Sprite )
 					}
 				}
 				Weapon->OldFlashCount = Weapon->FlashCount;
-				Weapon->bFirstFrame = 0;
 				Frame->Mirror = Mirror;
 			}
 			// Draw Flag
@@ -929,9 +926,6 @@ void URender::DrawActorSprite( FSceneNode* Frame, FDynamicSprite* Sprite )
 					Flag->Rotation = RealRot;
 				}
 			}
-			//Draw shadow
-			if ( ((APawn*)Sprite->Actor)->Shadow )
-				((APawn*)Sprite->Actor)->Shadow->eventUpdate(NULL);
 		}
 		unguard;
 	}

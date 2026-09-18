@@ -1458,10 +1458,31 @@ UBOOL appFindPackageFile( const TCHAR* In, const FGuid* Guid, TCHAR* Out )
 	// If using non-default language, search for internationalized version.
 	UBOOL International = (appStricmp(UObject::GetLanguage(),TEXT("int"))!=0);
 
+	// Retail .int files carry Windows paths: UMenu.int starts the campaign
+	// with StartMaps[0]=..\maps\Vortex2.unr, which arrives here as the map to
+	// open. Turn the separators round so the name is at least a path on this
+	// platform, and remember where the filename itself begins - everything in
+	// front of it is relative to the install root, and this engine's working
+	// directory is the read-only mount it was launched from, not that.
+	TCHAR Normalized[256];
+	appStrncpy( Normalized, In, ARRAY_COUNT(Normalized) );
+	const TCHAR* Leaf = Normalized;
+	for( TCHAR* C=Normalized; *C; C++ )
+	{
+		if( *C=='\\' )
+			*C = '/';
+		if( *C=='/' )
+			Leaf = C+1;
+	}
+
 	// Try file as specified.
-	appStrcpy( Out, In );
+	appStrcpy( Out, Normalized );
 	if( GFileManager->FileSize( Out ) >= 0 )
 		return 1;
+
+	// Otherwise look the bare filename up in the search paths, which already
+	// name the directories the game's content lives in.
+	In = Leaf;
 
 	// Try all of the predefined paths.
 	INT DoCd;
@@ -1558,10 +1579,20 @@ UBOOL appFindPackageFile( const TCHAR* In, const FGuid* Guid, TCHAR* Out )
 			TCHAR Spec[256];
 			*Spec = 0;
 			TArray<FString> Files;
+			// List the whole directory, not "*<Ext>". This is the
+			// case-insensitive fallback, but the glob it used was still case
+			// sensitive, so a retail file named CREDITS.UTX never matched
+			// "../Textures/*.utx" and the Textures directory was invisible
+			// here. The search then ran on to ../Music and matched
+			// Credits.umx, which is a different package, and Entry.unr failed
+			// to find the group credits.Base that lives in the texture one.
+			//
+			// Nothing is loosened by dropping the extension from the glob:
+			// the comparisons below still test against In and In+Ext, so the
+			// extension is enforced there - just case insensitively, like the
+			// name it sits on.
 			appStrcpy( Spec, Temp );
 			appStrcat( Spec, TEXT("*") );
-			if( Ext )
-				appStrcat( Spec, Ext );
 			Files = GFileManager->FindFiles( Spec, 1, 0 );
 
 			// Check for match.

@@ -44,6 +44,7 @@ ENGINE_API extern class FMemCache	GCache;
 #include "UnModel.h"			// Model class.
 #include "UnTex.h"				// Texture and palette.
 #include "EngineClasses.h"		// All actor classes.
+#include "UnGoldClasses.h"		// Classes only Unreal 226 has.
 #include "UnReach.h"			// Reach specs.
 #include "UnURL.h"				// Uniform resource locators.
 #include "UnLevel.h"			// Level object.

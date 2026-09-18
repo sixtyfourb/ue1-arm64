@@ -372,7 +372,7 @@ int main( int argc, char* argv[] )
 	// Init core.
 	GIsClient = 1; 
 	GIsGuarded = 0;
-	appInit( TEXT("UnrealTournament"), CmdLine, &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+	appInit( TEXT("Unreal"), CmdLine, &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
 
 	// Init mode.
 	GIsServer		= 1;

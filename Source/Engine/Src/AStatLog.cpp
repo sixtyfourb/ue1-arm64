@@ -16,148 +16,13 @@
 IMPLEMENT_CLASS(AMutator);
 #endif
 
-void AStatLog::execExecuteLocalLogBatcher( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execExecuteLocalLogBatcher);
-	P_FINISH;
-
-	appCreateProc( *LocalBatcherURL, *Level->Game->LocalLogFileName );
-
-	unguardexec;
-}
-
-void AStatLog::execExecuteSilentLogBatcher( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execExecuteSilentLogBatcher);
-	P_FINISH;
-
-	FString ProcArgs = FString::Printf( TEXT("-b false %s"), *Level->Game->LocalLogFileName );
-	appCreateProc( *LocalBatcherURL, *ProcArgs );
-
-	unguardexec;
-}
-
-void AStatLog::execBatchLocal( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execBatchLocal);
-	P_FINISH;
-
-	appCreateProc( *(((AStatLog*)GetClass()->GetDefaultObject())->LocalBatcherURL), *(((AStatLog*)GetClass()->GetDefaultObject())->LocalLogDir) );
-	unguardexec;
-}
-
-void AStatLog::execBrowseRelativeLocalURL( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execBrowseRelativeLocalURL);
-	P_GET_STR(URL);
-	P_FINISH;
-
-	appLaunchURL( *(GFileManager->GetDefaultDirectory() * URL) );
-
-	unguardexec;
-}
-
-void AStatLog::execExecuteWorldLogBatcher( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execExecuteWorldLogBatcher);
-	P_FINISH;
-
-	appCreateProc( *WorldBatcherURL, *WorldBatcherParams );
-
-	unguardexec;
-}
 
 
-void AStatLog::execInitialCheck( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execInitialCheck);
-	P_GET_OBJECT(AGameInfo, Game);
-	P_FINISH;
 
-	// Log the class in C++ to avoid trickery.
-	eventLogGameSpecial(TEXT("GameClass"), Game->GetClass()->GetFullName());
 
-	// Log all the loaded code packages and their checksums.
-	TArray<UPackage*> Packages;
-	for( TObjectIterator<UClass> It; It; ++It )
-		Packages.AddUniqueItem(CastChecked<UPackage>((*It)->GetOuter()));
-	for (INT i=0; i<Packages.Num(); i++)
-	{
-		// Get checksum values.
-		FString FileName = FString::Printf( TEXT("%s.u"), Packages(i)->GetFullName() );
-		INT Space = FileName.InStr(TEXT(" "));
-		FileName = FileName.Right( FileName.Len() - (Space+1) );
-		INT FileSize = GFileManager->FileSize( *FileName );
 
-		// Promote lowercase character values (a cool way of saying CAPITALIZE)
-		FString CapsName;
-		for (INT j=0; j<FileName.Len(); j++)
-		{
-			TCHAR c = (*FileName)[j];
-			if ((c >= 'a') && (c <= 'z'))
-				c = c + ('A' - 'a');
-			CapsName += FString::Printf( TEXT("%c"), c );
-		}
 
-		// Checksum the .u files.
-		FString CheckString = CapsName + FString::Printf( TEXT("%i"), FileSize );
-		if (FileSize != -1)
-		{
-			FMD5Context PContext;
-			appMD5Init( &PContext );
-			appMD5Update( &PContext, (BYTE*) *CheckString, CheckString.Len() * sizeof(TCHAR) );
-			BYTE Digest[16];
-			appMD5Final( Digest, &PContext );
-			FString Checksum;
-			for (INT j=0; j<16; j++)
-				Checksum += FString::Printf(TEXT("%02x"), Digest[j]);
-			eventLogGameSpecial2(TEXT("CodePackageChecksum"), *FileName, *Checksum);
-		}
 
-		// Get checksum values.
-		FileName = FString::Printf( TEXT("%s%s"), Packages(i)->GetFullName(), DLLEXT );
-		Space = FileName.InStr(TEXT(" "));
-		FileName = FileName.Right( FileName.Len() - (Space+1) );
-		FileSize = GFileManager->FileSize( *FileName );
-
-		// Capitalize.
-		for (INT j=0; j<FileName.Len(); j++)
-		{
-			TCHAR c = (*FileName)[j];
-			if ((c >= 'a') && (c <= 'z'))
-				c = c + ('A' - 'a');
-			CapsName += FString::Printf( TEXT("%c"), c );
-		}
-
-		// Checksum the .dll files.
-		CheckString = CapsName + FString::Printf( TEXT("%i"), FileSize );
-		if (FileSize != -1)
-		{
-			FMD5Context PContext;
-			appMD5Init( &PContext );
-			appMD5Update( &PContext, (BYTE*) *CheckString, CheckString.Len() * sizeof(TCHAR) );
-			BYTE Digest[16];
-			appMD5Final( Digest, &PContext );
-			FString Checksum;
-			for (INT j=0; j<16; j++)
-				Checksum += FString::Printf(TEXT("%02x"), Digest[j]);
-			eventLogGameSpecial2(TEXT("CodePackageChecksum"), *FileName, *Checksum);
-		}
-	}
-
-	unguardexec;
-}
-
-void AStatLog::execLogMutator( FFrame& Stack, RESULT_DECL )
-{
-	guard(AStatLog::execInitialCheck);
-	P_GET_OBJECT(AMutator, M);
-	P_FINISH;
-
-	eventLogGameSpecial(TEXT("GameMutator"), M->GetClass()->GetFullName());
-
-	unguardexec;
-}
 
 void AStatLog::execGetGMTRef( FFrame& Stack, RESULT_DECL )
 {
@@ -179,22 +44,24 @@ void AStatLog::execGetMapFileName( FFrame& Stack, RESULT_DECL )
 	unguardexec;
 }
 
-void AStatLog::execGetPlayerChecksum( FFrame& Stack, RESULT_DECL )
+void AStatLogFile::execGetPlayerChecksum( FFrame& Stack, RESULT_DECL )
 {
-	guard(AStatLog::execGetPlayerChecksum);
-	P_GET_OBJECT(APlayerPawn, P);
-	P_GET_STR_REF(Checksum);
+	guard(AStatLogFile::execGetPlayerChecksum);
+	P_GET_STR(PlayerName);
+	P_GET_STR(Secret);
 	P_FINISH;
 
 	FMD5Context PContext;
 	appMD5Init( &PContext );
-	appMD5Update( &PContext, (BYTE*)*(P->PlayerReplicationInfo->PlayerName), P->PlayerReplicationInfo->PlayerName.Len()*sizeof(TCHAR) );
-	appMD5Update( &PContext, (BYTE*)*(P->ngWorldSecret), P->ngWorldSecret.Len()*sizeof(TCHAR) );
+	appMD5Update( &PContext, (BYTE*)*PlayerName, PlayerName.Len()*sizeof(TCHAR) );
+	appMD5Update( &PContext, (BYTE*)*Secret, Secret.Len()*sizeof(TCHAR) );
 	BYTE Digest[16];
 	appMD5Final( Digest, &PContext );
-	*Checksum = FString::Printf( TEXT("") );
-	for (INT i=0; i<16; i++)
-		*Checksum += FString::Printf(TEXT("%02x"), Digest[i]);
+
+	FString Checksum;
+	for( INT i=0; i<16; i++ )
+		Checksum += FString::Printf( TEXT("%02x"), Digest[i] );
+	*(FString*)Result = Checksum;
 
 	unguardexec;
 }
@@ -248,8 +115,8 @@ void AStatLogFile::execWatermark( FFrame& Stack, RESULT_DECL )
 void AStatLogFile::execGetChecksum( FFrame& Stack, RESULT_DECL )
 {
 	guard(AStatLogFile::execGetChecksum);
-	P_GET_STR_REF(Checksum);
 	P_FINISH;
+	FString Checksum;
 
 	BYTE Secret[16];	// Must be bytes.  Used by MD5.
 	Secret[0] = 'M';
@@ -277,8 +144,9 @@ void AStatLogFile::execGetChecksum( FFrame& Stack, RESULT_DECL )
 	// Copy each byte into a string of arbitrary character size. (UNICODE safe.)
 	INT i;
 	for (i=0; i<16; i++) {
-		*Checksum += FString::Printf(TEXT("%02x"), Digest[i]);
+		Checksum += FString::Printf(TEXT("%02x"), Digest[i]);
 	}
+	*(FString*)Result = Checksum;
 
 	unguardexec;
 }

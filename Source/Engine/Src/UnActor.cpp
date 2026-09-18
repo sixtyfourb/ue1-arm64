@@ -58,6 +58,14 @@ IMPLEMENT_CLASS(ASpawnNotify);
 
 /*-----------------------------------------------------------------------------
 	Replication.
+
+	Inert against Unreal 226 content. These lists mirror UT99's script
+	replication blocks, and each is guarded by its class's
+	CLASS_NativeReplication flag, which this tree no longer sets: 226 declares
+	no class `nativereplication`, so replication is driven entirely by the
+	script blocks (UnChan.cpp asks ShouldDoScriptReplication, which is true by
+	default). Kept only because they are upstream code - do not re-enable the
+	flag without rewriting them against 226's blocks.
 -----------------------------------------------------------------------------*/
 
 UBOOL NEQ(BYTE A,BYTE B,UPackageMap* Map) {return A!=B;}
@@ -119,12 +127,12 @@ INT* AActor::GetOptimizedRepList( BYTE* Recent, FPropertyRetirement* Retire, INT
 			{
 				DOREP(Actor,Instigator);
 			}
-			if  ( !bNetOwner || !bClientAnim )
+			if( 1 )
 			{
 				DOREP(Actor,AmbientSound);
 			}
 
-			if( (AmbientSound!=NULL) && (!bNetOwner || !bClientAnim) )
+			if( AmbientSound!=NULL )
 			{
 				DOREP(Actor,SoundRadius);
 				DOREP(Actor,SoundVolume);
@@ -152,7 +160,7 @@ INT* AActor::GetOptimizedRepList( BYTE* Recent, FPropertyRetirement* Retire, INT
 				DOREP(Actor,bMeshEnviroMap);
 				DOREP(Actor,Skin);
 				DOREPARRAY(Actor,MultiSkins);
-				if( ((RemoteRole<=ROLE_SimulatedProxy) && (!bNetOwner || !bClientAnim)) || bDemoRecording )
+				if( (RemoteRole<=ROLE_SimulatedProxy) || bDemoRecording )
 				{
 					DOREP(Actor,AnimSequence);
 					DOREP(Actor,SimAnim);
@@ -204,14 +212,8 @@ INT* AActor::GetOptimizedRepList( BYTE* Recent, FPropertyRetirement* Retire, INT
 					}
 				}
 			}
-			else if ( bSimFall )
-			{
-				DOREP(Actor,Physics);
-				DOREP(Actor,Acceleration);
-				DOREP(Actor,bBounce);
-			}
 
-			if( bSimFall || bIsMover || (RemoteRole==ROLE_SimulatedProxy && (bNetInitial || bSimulatedPawn)) )
+			if( bIsMover || (RemoteRole==ROLE_SimulatedProxy && (bNetInitial || bSimulatedPawn)) )
 			{
 				DOREP(Actor,Velocity);
 			}
@@ -274,8 +276,6 @@ INT* APlayerPawn::GetOptimizedRepList( BYTE* Recent, FPropertyRetirement* Retire
 				DOREP(PlayerPawn,HUDType);
 				DOREP(PlayerPawn,GameReplicationInfo);
 				DOREP(PlayerPawn,bFixedCamera);
-				DOREP(PlayerPawn,bNeverAutoSwitch);
-				DOREP(PlayerPawn,bCheatsEnabled);
 				{
 					FRotator TempTargetViewRotation = TargetViewRotation;
 					FRotator TempRecentTargetViewRotation = ((APlayerPawn*)Recent)->TargetViewRotation;
@@ -290,8 +290,6 @@ INT* APlayerPawn::GetOptimizedRepList( BYTE* Recent, FPropertyRetirement* Retire
 			}
 			if( bDemoRecording )
 			{
-				DOREP(PlayerPawn,DemoViewPitch);
-				DOREP(PlayerPawn,DemoViewYaw);
 			}
 		}
 		else
@@ -355,27 +353,20 @@ INT* APlayerReplicationInfo::GetOptimizedRepList( BYTE* Recent, FPropertyRetirem
 		if( Role==ROLE_Authority )
 		{
 			DOREP(PlayerReplicationInfo,PlayerName);
-			DOREP(PlayerReplicationInfo,OldName);
 			DOREP(PlayerReplicationInfo,PlayerID);
 			DOREP(PlayerReplicationInfo,TeamName);
 			DOREP(PlayerReplicationInfo,Team);
 			DOREP(PlayerReplicationInfo,TeamID);
 			DOREP(PlayerReplicationInfo,Score);
-			DOREP(PlayerReplicationInfo,Deaths);
 			DOREP(PlayerReplicationInfo,VoiceType);
 			DOREP(PlayerReplicationInfo,HasFlag);
 			DOREP(PlayerReplicationInfo,Ping);
-			DOREP(PlayerReplicationInfo,PacketLoss);
 			DOREP(PlayerReplicationInfo,bIsFemale);
 			DOREP(PlayerReplicationInfo,bIsABot);
 			DOREP(PlayerReplicationInfo,bFeigningDeath);
 			DOREP(PlayerReplicationInfo,bIsSpectator);
-			DOREP(PlayerReplicationInfo,bWaitingPlayer);
-			DOREP(PlayerReplicationInfo,bAdmin);
 			DOREP(PlayerReplicationInfo,TalkTexture);
 			DOREP(PlayerReplicationInfo,PlayerZone);
-			DOREP(PlayerReplicationInfo,PlayerLocation);
-			DOREP(PlayerReplicationInfo,StartTime);
 		}
 	}
 	return Ptr;
@@ -390,7 +381,6 @@ INT* AGameReplicationInfo::GetOptimizedRepList( BYTE* Recent, FPropertyRetiremen
 		if( Role==ROLE_Authority )
 		{
 			DOREP(GameReplicationInfo,GameName);
-			DOREP(GameReplicationInfo,GameClass);
 			DOREP(GameReplicationInfo,bTeamGame);
 			DOREP(GameReplicationInfo,ServerName);
 			DOREP(GameReplicationInfo,ShortName);
@@ -401,9 +391,6 @@ INT* AGameReplicationInfo::GetOptimizedRepList( BYTE* Recent, FPropertyRetiremen
 			DOREP(GameReplicationInfo,MOTDLine2);
 			DOREP(GameReplicationInfo,MOTDLine3);
 			DOREP(GameReplicationInfo,MOTDLine4);
-			DOREP(GameReplicationInfo,RemainingMinute);
-			DOREP(GameReplicationInfo,NumPlayers);
-			DOREP(GameReplicationInfo,bStopCountDown);
 			DOREP(GameReplicationInfo,GameEndedComments);
 			if ( bNetInitial )
 			{
@@ -548,12 +535,6 @@ void AActor::PostNetReceive()
 			if ( ApproxRot == Mover->OldRot )
 				Mover->OldRot = Mover->BaseRot + Mover->KeyRot[Mover->KeyNum];*/
 		}
-	}
-	if( IsA(APlayerPawn::StaticClass()) && GetLevel()->DemoRecDriver && GetLevel()->DemoRecDriver->ServerConnection )
-	{
-		APlayerPawn* PlayerPawn = Cast<APlayerPawn>( this );
-		PlayerPawn->ViewRotation.Pitch = PlayerPawn->DemoViewPitch;
-		PlayerPawn->ViewRotation.Yaw = PlayerPawn->DemoViewYaw;
 	}
 	if( SimAnim != SavedSimAnim )
 	{

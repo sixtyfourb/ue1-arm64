@@ -322,7 +322,25 @@ FURL::FURL( FURL* Base, const TCHAR* TextURL, ETravelType Type )
 		// Map.
 		Map = URL;
 	}
-	
+
+	// Reduce a map to its filename. Retail .int files hand the engine Windows
+	// paths - UMenu.int starts the campaign with "..\\maps\\Vortex2.unr" - which
+	// worked when the working directory was the install's System folder. Here
+	// it is the read-only mount the game was launched from, and the package
+	// would otherwise be named after the whole path. The search paths already
+	// know which directories hold maps, so the name alone is what is wanted.
+	if( Map.InStr(TEXT("/"))!=INDEX_NONE || Map.InStr(TEXT("\\"))!=INDEX_NONE )
+	{
+		FString Leaf = Map;
+		INT Slash;
+		while( (Slash=Leaf.InStr(TEXT("/"),1))!=INDEX_NONE )
+			Leaf = Leaf.Mid( Slash+1 );
+		while( (Slash=Leaf.InStr(TEXT("\\"),1))!=INDEX_NONE )
+			Leaf = Leaf.Mid( Slash+1 );
+		if( Leaf.Len() )
+			Map = Leaf;
+	}
+
 	// Validate everything.
 	if
 	(	!ValidNetChar(*Protocol  )

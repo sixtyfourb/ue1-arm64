@@ -287,11 +287,6 @@ UBOOL AActor::Tick( FLOAT DeltaSeconds, ELevelTick TickType )
 			PlayerPawn->eventPlayerTick( DeltaSeconds );
 			PlayerPawn->Player->ReadInput( -1.0 );
 
-			if( GetLevel()->DemoRecDriver && !GetLevel()->DemoRecDriver->ServerConnection )
-			{
-				PlayerPawn->DemoViewPitch = PlayerPawn->ViewRotation.Pitch;
-				PlayerPawn->DemoViewYaw = PlayerPawn->ViewRotation.Yaw;
-			}
 		}
 
 		// Update the actor's script state code.
@@ -370,10 +365,7 @@ UBOOL AActor::Tick( FLOAT DeltaSeconds, ELevelTick TickType )
 	{
 		if( Pawn->bIsPlayer && Role>=ROLE_AutonomousProxy )
 		{
-			if ( Pawn->bViewTarget )
-				Pawn->eventUpdateEyeHeight( DeltaSeconds );
-			else
-				Pawn->ViewRotation = Rotation;
+			Pawn->eventUpdateEyeHeight( DeltaSeconds );
 		}
 
 		// update weapon location (in case its playing sounds, etc.)
@@ -415,8 +407,6 @@ UBOOL AActor::Tick( FLOAT DeltaSeconds, ELevelTick TickType )
 					Pawn->eventSpeechTimer();
 				}
 			}
-			if ( Pawn->bAdvancedTactics )
-				Pawn->eventUpdateTactics(DeltaSeconds);
 		}
 	}
 
@@ -704,14 +694,12 @@ INT ULevel::TickDemoRecord( FLOAT DeltaSeconds )
 				if( Channel->IsNetReady(0) )
 				{
 					Actor->bDemoRecording = 1;
-					Actor->bClientDemoRecording = IsNetClient;
 					if(IsNetClient)
 						Exchange(Actor->RemoteRole, Actor->Role);
 					Channel->ReplicateActor();
 					if(IsNetClient)
 						Exchange(Actor->RemoteRole, Actor->Role);
 					Actor->bDemoRecording = 0;
-					Actor->bClientDemoRecording = 0;
 				}
 			}
 		}

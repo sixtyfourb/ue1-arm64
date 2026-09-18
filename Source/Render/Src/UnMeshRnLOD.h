@@ -84,7 +84,7 @@ void URender::DrawLodMesh
 		// Z coordinate :in units. 60 units is about the player's height. 
 		FLOAT Z = Owner->Location.TransformPointBy(Coords).Z - Mesh->LODZDisplace;
 		FLOAT DetailDiv = Mesh->LODStrength * GlobalShapeLOD * GlobalShapeLODAdjust * FovBias * Max(1.0f,Z) * CpxBias;  	
-		FLOAT MeshVertLOD  = 430.f * ResolutionBias * Owner->DrawScale * Owner->LODBias * Mesh->MeshScaleMax / DetailDiv;  
+		FLOAT MeshVertLOD  = 430.f * ResolutionBias * Owner->DrawScale * Mesh->MeshScaleMax / DetailDiv;  
 		// Overscaling > 1.0 allowed; actually needed for the LOD morphing. 
 		//  150.0 was the initial setting.   340.f seems useful.
 		//  430.0 is Steve's 224 conservative setting.

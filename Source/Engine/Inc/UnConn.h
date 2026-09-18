@@ -66,6 +66,12 @@ class ENGINE_API UNetConnection : public UPlayer
 	INT				NegotiatedVer;			// Negotiated version for new channels.
 	INT				UserFlags;				// User-specified flags.
 	FStringNoInit	RequestURL;				// URL requested by client
+	// The live send rate for this connection. It lived on UPlayer, but 226's
+	// script Player has no such property and the C++ mirror has to match it;
+	// 226 declares no Engine.NetConnection at all, so this class is ours to
+	// shape. Seeded in UNetConnection::Init from PlayerPawn's configured
+	// NetSpeed/LanSpeed.
+	INT				CurrentNetSpeed;
 
 	// Internal.
 	DOUBLE			LastReceiveTime;		// Last time a packet was received, for timeout checking.

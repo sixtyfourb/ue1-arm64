@@ -866,8 +866,6 @@ void UActorChannel::ReceivedBunch( FInBunch& Bunch )
 			// Call the function.
 			if( !Ignore )
 			{
-				// The bClientDemoNetFunc flag gets cleared in ProcessDemoRecFunction
-				Actor->bClientDemoNetFunc = 1;
 				Actor->ProcessEvent( Function, Parms );
 			}
 

@@ -1,4 +1,4 @@
-project(UnrealTournament CXX)
+project(Unreal CXX)
 
 set(SRC_FILES "Src/Launch.cpp")
 

@@ -500,13 +500,13 @@ UBOOL UViewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	{
 		INT Rate = appAtoi(Cmd);
 		UNetDriver* Driver = Actor->GetLevel()->NetDriver;
-		GetDefault<UPlayer>()->ConfiguredInternetSpeed = Rate;
-		GetDefault<UPlayer>()->SaveConfig();
+		GetDefault<APlayerPawn>()->NetSpeed = Rate;
+		APlayerPawn::StaticClass()->GetDefaultObject()->SaveConfig();
 		if( Rate>=500 && Driver && Driver->ServerConnection )
 		{
 			if( !Driver->ServerConnection->URL.HasOption(TEXT("LAN")) )
 			{
-				CurrentNetSpeed = Driver->ServerConnection->CurrentNetSpeed = Clamp<INT>( Rate, 500, Driver->MaxClientRate );
+				Driver->ServerConnection->CurrentNetSpeed = Clamp<INT>( Rate, 500, Driver->MaxClientRate );
 				Driver->ServerConnection->Logf( TEXT("NETSPEED %i"), Rate );
 			}
 		}
@@ -516,13 +516,13 @@ UBOOL UViewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	{
 		INT Rate = appAtoi(Cmd);
 		UNetDriver* Driver = Actor->GetLevel()->NetDriver;
-		GetDefault<UPlayer>()->ConfiguredInternetSpeed = Rate;
-		GetDefault<UPlayer>()->SaveConfig();
+		GetDefault<APlayerPawn>()->LanSpeed = Rate;
+		APlayerPawn::StaticClass()->GetDefaultObject()->SaveConfig();
 		if( Rate>=500 && Driver && Driver->ServerConnection )
 		{
 			if( Driver->ServerConnection->URL.HasOption(TEXT("LAN")) )
 			{
-				CurrentNetSpeed = Driver->ServerConnection->CurrentNetSpeed = Clamp<INT>( Rate, 500, Driver->MaxClientRate );
+				Driver->ServerConnection->CurrentNetSpeed = Clamp<INT>( Rate, 500, Driver->MaxClientRate );
 				Driver->ServerConnection->Logf( TEXT("NETSPEED %i"), Rate );
 			}
 		}

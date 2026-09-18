@@ -28,7 +28,6 @@ class ENGINE_API UPlayer : public UObject, public FOutputDevice, public FExec
 	BITFIELD		bSuspendPrecaching:1;
 	FLOAT			WindowsMouseX;
 	FLOAT			WindowsMouseY;
-	INT				CurrentNetSpeed, ConfiguredInternetSpeed, ConfiguredLanSpeed;
 	BYTE			SelectedCursor;
 
 	// Constructor.

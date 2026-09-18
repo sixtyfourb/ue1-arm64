@@ -48,8 +48,15 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 	Parse(appCmdLine(),TEXT("PktLag="),  PktLag);
 #endif
 
-	// Other parameters.
-	CurrentNetSpeed = URL.HasOption(TEXT("LAN")) ? GetDefault<UPlayer>()->ConfiguredLanSpeed : GetDefault<UPlayer>()->ConfiguredInternetSpeed;
+	// Other parameters. 226 keeps the configured rate on PlayerPawn, as
+	// globalconfig NetSpeed/LanSpeed in User.ini, not on Player - reading it
+	// from Player's defaults here left it zero and the throttle below
+	// ("DeltaBytes = CurrentNetSpeed * DeltaTime") then allowed no traffic.
+	UBOOL bLan     = URL.HasOption(TEXT("LAN"));
+	CurrentNetSpeed = bLan ? GetDefault<APlayerPawn>()->LanSpeed
+	                       : GetDefault<APlayerPawn>()->NetSpeed;
+	if( CurrentNetSpeed <= 0 )
+		CurrentNetSpeed = bLan ? 20000 : 2600;	// what retail ships in User.ini
 
 	// Create package map.
 	PackageMap = new(this)UPackageMapLevel(this);
@@ -787,13 +794,6 @@ void UNetConnection::Tick()
 		else
 			HighLossCount=0;
 
-		if( Actor )
-		{
-			FLOAT PktLoss = ::Max(InLoss, OutLoss) * 0.01;
-			FLOAT ModifiedLag = BestLag + 1.2 * PktLoss;
-			Actor->bBadConnectionAlert = !InternalAck && ((ModifiedLag>0.8 || CurrentNetSpeed * (1 - PktLoss)<2000) && ActorChannels.FindRef(Actor)) || InPackets < 2;
-		}
-
 		// Init counters.
 		LagAcc			= 0;
 		BestLagAcc		= 9999;
@@ -865,7 +865,6 @@ void UNetConnection::HandleClientPlayer( APlayerPawn *Pawn )
 	check(Pawn->GetLevel()->Engine->Client->Viewports.Num());
 	Viewport = Pawn->GetLevel()->Engine->Client->Viewports(0);
 	Viewport->Actor->Player = NULL;
-	Viewport->CurrentNetSpeed = CurrentNetSpeed;
 
 	// Init the new playerpawn.
 	guard(InitialPlayerPawn);

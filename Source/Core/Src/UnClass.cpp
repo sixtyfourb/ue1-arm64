@@ -360,6 +360,7 @@ static INT GetPlaceholderSize( UStruct* Owner, UProperty* Property )
 		{ TEXT("InternetLink"),    TEXT("PrivateResolveInfo"), sizeof(void*) }, // FResolveInfo*.
 		{ TEXT("StatLog"),         TEXT("Context"),            sizeof(void*) }, // FMD5Context*.
 		{ TEXT("StatLogFile"),     TEXT("LogAr"),              sizeof(void*) }, // FArchive*.
+		{ TEXT("TimeDemo"),        TEXT("FileAr"),             sizeof(void*) }, // FArchive*.
 		{ TEXT("WaterTexture"),    TEXT("SourceFields"),       sizeof(void*) }, // BYTE*.
 		{ TEXT("WetTexture"),      TEXT("LocalSourceBitmap"),  sizeof(void*) }, // BYTE*.
 		{ TEXT("IceTexture"),      TEXT("LocalSource"),        sizeof(void*) }, // BYTE* LocalSourceBitmap.

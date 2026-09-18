@@ -3173,10 +3173,11 @@ void URender::DrawWorld( FSceneNode* Frame )
 		if( Engine->Audio && !GIsEditor )
 			Engine->Audio->RenderAudioGeometry( Frame );
 
-		// adjust LOD if rendering too slowly
-		if ( Frame->Viewport->Actor->GetLevel()->GetLevelInfo()->bDropDetail )
+		// 226 has no bDropDetail/bAggressiveLOD, so nothing asks for the
+		// dynamic detail drop and the adjustment only relaxes back to 1.
+		if ( 0 )
 		{
-			if ( Frame->Viewport->Actor->GetLevel()->GetLevelInfo()->bAggressiveLOD )
+			if ( 0 )
 				GlobalShapeLODAdjust = Clamp(GlobalShapeLODAdjust+0.1f,1.f,1.6f);
 			else if ( GlobalShapeLODAdjust > 1.3f )
 				GlobalShapeLODAdjust -= 0.1f;

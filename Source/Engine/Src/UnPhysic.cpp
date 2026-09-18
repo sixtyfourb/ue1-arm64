@@ -159,14 +159,6 @@ void AActor::performPhysics(FLOAT DeltaSeconds)
 	if ( !RotationRate.IsZero() ) 
 		physicsRotation(DeltaSeconds);
 
-	// allow touched actors to impact physics
-	if ( PendingTouch )
-	{
-		PendingTouch->eventPostTouch(this);
-		AActor *OldTouch = PendingTouch;
-		PendingTouch = PendingTouch->PendingTouch;
-		OldTouch->PendingTouch = NULL;
-	}
 	unguard;
 }
 
@@ -200,17 +192,6 @@ void APawn::performPhysics(FLOAT DeltaSeconds)
 
 	MoveTimer -= DeltaSeconds;
 	AvgPhysicsTime = 0.8 * AvgPhysicsTime + 0.2 * DeltaSeconds;
-
-	if ( PendingTouch )
-	{
-		PendingTouch->eventPostTouch(this);
-		if ( PendingTouch )
-		{
-			AActor *OldTouch = PendingTouch;
-			PendingTouch = PendingTouch->PendingTouch;
-			OldTouch->PendingTouch = NULL;
-		}
-	}
 
 	unguard;
 }
@@ -1131,11 +1112,6 @@ void AActor::processLanded(FVector HitNormal, AActor *HitActor, FLOAT remainingT
 {
 	guard(AActor::processLanded);
 
-	if ( !bIsPawn && Region.Zone->bBounceVelocity && (Region.Zone->ZoneVelocity != FVector(0,0,0)) )
-	{
-		Velocity = Region.Zone->ZoneVelocity + FVector(0,0,80);
-		return;
-	}
 	if ( IsA(APawn::StaticClass()) ) //Check that it is a valid landing (not a BSP cut)
 	{
 		FCheckResult Hit(1.0);
@@ -2136,9 +2112,7 @@ void AActor::physTrailer(FLOAT deltaTime)
 		return;
 	if ( DrawType == DT_Sprite )
 	{
-		if ( bTrailerPrePivot )
-			GetLevel()->FarMoveActor(this, Owner->Location + PrePivot, 0, 1);
-		else if (bTrailerSameRotation )
+		if (bTrailerSameRotation )
 			GetLevel()->FarMoveActor(this, Owner->Location - Mass * Owner->Rotation.Vector(), 0, 1);
 		else
 			GetLevel()->FarMoveActor(this, Owner->Location, 0, 1);

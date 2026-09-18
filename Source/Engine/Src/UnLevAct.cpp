@@ -140,19 +140,6 @@ AActor* ULevel::SpawnActor
 	if( InTick )
 		NewlySpawned = new(GEngineMem)FActorLink(Actor,NewlySpawned);
 
-	static UBOOL InsideNotification = 0;
-	if( !InsideNotification )
-	{
-		InsideNotification = 1;
-		// Spawn notification
-		for( ASpawnNotify* N = GetLevelInfo()->SpawnNotify; N; N = N->Next )
-		{
-			if( N->ActorClass && Actor->IsA(N->ActorClass) )
-				Actor = N->eventSpawnNotification( Actor );
-		}
-		InsideNotification = 0;
-	}
-
 	return Actor;
 	unguardf(( TEXT("(%s)"), Class->GetName() ));
 }

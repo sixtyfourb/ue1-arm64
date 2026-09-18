@@ -26,6 +26,9 @@ struct UConsole_eventConnectFailure_Parms
     FString FailCode;
     FString URL;
 };
+// Declared in UnGoldClasses.h, which comes after this header.
+class ATimeDemo;
+
 class ENGINE_API UConsole : public UObject, public FOutputDevice
 {
 	DECLARE_CLASS(UConsole,UObject,CLASS_Transient)
@@ -116,18 +119,24 @@ private:
 	enum {MAX_HISTORY	 = 16};
 
 	// Variables.
+public:
+	// Variables, in Engine.Console's property order - UStruct::Link decides
+	// the offsets and this only mirrors them. 226 keeps no timedemo state
+	// here: it spawns a TimeDemo actor and drives it from script
+	// (TimeDemo.DoSetup/TickTimeDemo/PostRender/DoShutdown), which is why
+	// there is a TimeDemo reference in the middle of the bools and none of
+	// UT99's inline frame counters, fps strings or Font.
     class UViewport* Viewport;
     INT HistoryTop;
     INT HistoryBot;
     INT HistoryCur;
-    FStringNoInit TypedStr;
+    FStringNoInit TypedStr GCC_PACK(4);
     FStringNoInit History[16];
     INT Scrollback;
     INT numLines;
     INT TopLine;
     INT TextLines;
     FLOAT MsgTime;
-    FLOAT MsgTickTime;
     FStringNoInit MsgText[64];
     FName MsgType[64];
     class APlayerReplicationInfo* MsgPlayer[64];
@@ -144,34 +153,14 @@ private:
     class UTexture* Border;
     BITFIELD bNoStuff:1 GCC_PACK(4);
     BITFIELD bTyping:1;
-    BITFIELD bNoDrawWorld:1;
     BITFIELD bTimeDemo:1;
-    BITFIELD bStartTimeDemo:1;
-    BITFIELD bRestartTimeDemo:1;
-	BITFIELD bSaveTimeDemoToFile:1;
-    FLOAT StartTime GCC_PACK(4);
-    FLOAT ExtraTime;
-    FLOAT LastFrameTime;
-    FLOAT LastSecondStartTime;
-    INT FrameCount;
-    INT LastSecondFrameCount;
-    FLOAT MinFPS;
-    FLOAT MaxFPS;
-    FLOAT LastSecFPS;
-	class UFont* Font;
-    FStringNoInit LoadingMessage;
+    class ATimeDemo* TimeDemo GCC_PACK(4);
+    BITFIELD bNoDrawWorld:1 GCC_PACK(4);
+    FStringNoInit LoadingMessage GCC_PACK(4);
     FStringNoInit SavingMessage;
     FStringNoInit ConnectingMessage;
     FStringNoInit PausedMessage;
     FStringNoInit PrecachingMessage;
-    FStringNoInit FrameRateText;
-    FStringNoInit AvgText;
-    FStringNoInit LastSecText;
-    FStringNoInit MinText;
-    FStringNoInit MaxText;
-    FStringNoInit fpsText;
-    FStringNoInit SecondsText;
-    FStringNoInit FramesText;
 };
 
 /*------------------------------------------------------------------------------

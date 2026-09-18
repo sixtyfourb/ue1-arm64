@@ -196,8 +196,18 @@ static inline void DrawChar
 // and the destination is scaled, with the advance and the reported text
 // extents scaled to match so wrapping and centring still line up.
 //
+// Set while the console draws, which is when the menus draw. Cleared at the
+// top of every frame by UCanvas::Update, so the HUD - drawn before the console
+// - always sees it clear.
+ENGINE_API UBOOL GCanvasTextUnscaled = 0;
+
 static inline FLOAT GetFontScale( UCanvas* Canvas )
 {
+	// The menus size themselves: UWindow measures with TextSize and lays widgets
+	// out against window sizes it cannot grow, so scaled metrics make every
+	// string overflow its container. They have GUIScale for this already.
+	if( GCanvasTextUnscaled )
+		return 1.f;
 	FLOAT Scale = 1.f;
 	if( Canvas && Canvas->Viewport )
 		Scale = Canvas->Viewport->GetOuterUClient()->FontScale;
@@ -471,6 +481,7 @@ void UCanvas::Init( UViewport* InViewport )
 void UCanvas::Update( FSceneNode* InFrame )
 {
 	guard(UCanvas::Update);
+	GCanvasTextUnscaled = 0;
 
 	// Call UnrealScript to reset.
 	eventReset();

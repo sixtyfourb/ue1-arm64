@@ -154,6 +154,8 @@ void UConsole::PreRender( FSceneNode* Frame )
 void UConsole::PostRender( FSceneNode* Frame )
 {
 	guard(UConsole::PostRender);
+	// Everything the console and the menus draw from here on is unscaled.
+	GCanvasTextUnscaled = 1;
 	
 	*Frame = SavedFrame;
 	FrameX = Frame->X;

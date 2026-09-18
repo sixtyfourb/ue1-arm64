@@ -350,6 +350,10 @@ struct ENGINE_API HHitProxy
 //
 // Client, responsible for tracking viewports.
 //
+// Set while the console and the menus draw, so canvas text goes out at its
+// native size there. See GetFontScale in UnCanvas.cpp.
+extern ENGINE_API UBOOL GCanvasTextUnscaled;
+
 class ENGINE_API UClient : public UObject
 {
 	DECLARE_ABSTRACT_CLASS(UClient,UObject,CLASS_Config)

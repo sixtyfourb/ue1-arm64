@@ -196,17 +196,31 @@ static inline void DrawChar
 // and the destination is scaled, with the advance and the reported text
 // extents scaled to match so wrapping and centring still line up.
 //
-// Set while the console draws, which is when the menus draw. Cleared at the
-// top of every frame by UCanvas::Update, so the HUD - drawn before the console
-// - always sees it clear.
-ENGINE_API UBOOL GCanvasTextUnscaled = 0;
-
-static inline FLOAT GetFontScale( UCanvas* Canvas )
+// Which text the scale reaches is decided by the font, not by who is drawing.
+// UWindow draws every menu string with Root.Fonts[], loaded from UWindowFonts,
+// and picks Tahoma10 or Tahoma20 out of it according to GUIScale - so menu text
+// already sizes itself, and scaling it again makes strings overflow windows
+// UWindow has no way to grow, which is a menu squished together rather than a
+// larger one. Every other font is named in compiled script with no setting
+// behind it, and is what this scale exists for.
+//
+// Keying on the font is what makes Unreal work. Its UPakConsole draws the
+// in-game messages itself, in the same PostRender that puts up the menus, so
+// nothing scoped to the console can tell the two apart; UT99 hands its messages
+// to the HUD instead, which is the only reason a console-wide flag looked right.
+static UBOOL IsMenuFont( UFont* Font )
 {
-	// The menus size themselves: UWindow measures with TextSize and lays widgets
-	// out against window sizes it cannot grow, so scaled metrics make every
-	// string overflow its container. They have GUIScale for this already.
-	if( GCanvasTextUnscaled )
+	if( !Font )
+		return 0;
+	UObject* Package = Font;
+	while( Package->GetOuter() )
+		Package = Package->GetOuter();
+	return appStricmp( Package->GetName(), TEXT("UWindowFonts") )==0;
+}
+
+static inline FLOAT GetFontScale( UCanvas* Canvas, UFont* Font )
+{
+	if( IsMenuFont( Font ) )
 		return 1.f;
 	FLOAT Scale = 1.f;
 	if( Canvas && Canvas->Viewport )
@@ -371,7 +385,7 @@ void VARARGS UCanvas::WrappedPrint( ERenderStyle Style, INT& XL, INT& YL, UFont*
 	if( (Font==LargeFont || Font==BigFont) && appStricmp(UObject::GetLanguage(),TEXT("INT")) )
 		Font = MedFont;//BigFont;!!
 	check(Font);
-	const FLOAT TextScale = GetFontScale( this );
+	const FLOAT TextScale = GetFontScale( this, Font );
 	FPlane DrawColor = Color.Plane();
 
 	// Generate flags.
@@ -481,8 +495,6 @@ void UCanvas::Init( UViewport* InViewport )
 void UCanvas::Update( FSceneNode* InFrame )
 {
 	guard(UCanvas::Update);
-	GCanvasTextUnscaled = 0;
-
 	// Call UnrealScript to reset.
 	eventReset();
 
@@ -747,7 +759,7 @@ void UCanvas::execDrawTextClipped( FFrame& Stack, RESULT_DECL )
 	:	                           0);
 
 	FPlane DrawColor = Color.Plane();
-	DrawString( PolyFlags, this, Font, (INT) CurX, (INT) CurY, *InText, DrawColor, 1, CheckHotKey, GetFontScale(this) );
+	DrawString( PolyFlags, this, Font, (INT) CurX, (INT) CurY, *InText, DrawColor, 1, CheckHotKey, GetFontScale(this, Font) );
 
 	unguardexec;
 }
@@ -773,7 +785,7 @@ void UCanvas::execTextSize( FFrame& Stack, RESULT_DECL )
 
 	for( INT i=0; (*InText)[i]; i++)
 	{
-		GetCharSize( Font, (*InText)[i], W, H, GetFontScale(this) );
+		GetCharSize( Font, (*InText)[i], W, H, GetFontScale(this, Font) );
 		
 		XLi += W;
 		if(YLi < H)
